@@ -56,27 +56,19 @@ pub struct Command {
 // Clap command conversion
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Leak a [`String`] into a `&'static str`.
-///
-/// This is used when building a dynamic [`clap::Command`] structure at runtime,
-/// because clap 4.x's builder methods (`.long()`, `.about()`, `.help()`,
-/// `.value_name()`) require `&'static str` references.  The leak is intentional
-/// and acceptable because `to_clap_command` is only called in short-lived
-/// completion synthesis runs.
-fn leak_string(s: String) -> &'static str {
-    Box::leak(s.into_boxed_str())
-}
-
 /// Convert a parsed [`Command`] tree into a [`clap::Command`] that can be used
 /// to generate shell completion scripts via [`clap_complete`].
 ///
 /// Argument names are derived from the long flag (stripping the leading `--`),
 /// falling back to the short flag (stripping `-`), and finally `"arg"` for
-/// purely positional arguments.  Short and long flags are attached when present.
+/// purely positional arguments. Short and long flags are attached when present.
 /// `value_type` is used as the `value_name` meta-variable and also implies
 /// `num_args(1)` unless `num_args` overrides it explicitly.
+///
+/// This uses clap's `string` feature to dynamically allocate and assign owned
+/// strings to avoid any memory leakages.
 pub fn to_clap_command(cmd: &Command) -> clap::Command {
-    let name = leak_string(cmd.name.as_deref().unwrap_or("unknown").to_string());
+    let name = cmd.name.clone().unwrap_or_else(|| "unknown".to_string());
     let mut clap_cmd = clap::Command::new(name)
         // The parsed args already include `--help`/`--version` when present, so
         // disable clap's auto-generated flags to avoid duplicate-name panics.
@@ -84,7 +76,7 @@ pub fn to_clap_command(cmd: &Command) -> clap::Command {
         .disable_version_flag(true);
 
     if let Some(desc) = &cmd.description {
-        clap_cmd = clap_cmd.about(leak_string(desc.clone()));
+        clap_cmd = clap_cmd.about(desc.clone());
     }
 
     let mut used_short_flags = std::collections::HashSet::new();
@@ -124,12 +116,10 @@ pub fn to_clap_command(cmd: &Command) -> clap::Command {
             suffix += 1;
         }
 
-        let id = leak_string(id);
-
-        let mut clap_arg = clap::Arg::new(id);
+        let mut clap_arg = clap::Arg::new(id.clone());
 
         if let Some(long) = &long_bare {
-            clap_arg = clap_arg.long(leak_string(long.clone()));
+            clap_arg = clap_arg.long(long.clone());
         }
 
         if let Some(short) = &arg.short {
@@ -147,16 +137,14 @@ pub fn to_clap_command(cmd: &Command) -> clap::Command {
         }
 
         if let Some(desc) = &arg.description {
-            clap_arg = clap_arg.help(leak_string(desc.clone()));
+            clap_arg = clap_arg.help(desc.clone());
         }
 
         if let Some(value_type) = &arg.value_type {
             // Strip surrounding angle-brackets if present (e.g. `<PATH>` → `PATH`).
-            let meta = leak_string(
-                value_type
-                    .trim_matches(|c| c == '<' || c == '>')
-                    .to_string(),
-            );
+            let meta = value_type
+                .trim_matches(|c| c == '<' || c == '>')
+                .to_string();
             clap_arg = clap_arg.value_name(meta);
             // A value type implies the flag accepts exactly one value by default;
             // this may be overridden below by an explicit `num_args`.
@@ -389,15 +377,110 @@ fn find_subcommand_mut<'a>(root: &'a mut Command, path: &[String]) -> Option<&'a
 ///
 /// Many tools print their help to *stderr* rather than *stdout*; this function
 /// returns whichever stream is non-empty (preferring stdout).
-pub fn run_help(command_path: &str, extra_args: &[&str]) -> anyhow::Result<String> {
-    let output = std::process::Command::new(command_path)
+pub fn run_help(command_path: &str, extra_args: &[&str], sandbox: bool) -> anyhow::Result<String> {
+    let use_sandbox = sandbox && {
+        // Test if bwrap exists in PATH by trying to spawn it with --version
+        match std::process::Command::new("bwrap")
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(mut child) => {
+                let _ = child.wait();
+                true
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                log::warn!(
+                    "bubblewrap (bwrap) not found in PATH; running completion check unsandboxed."
+                );
+                false
+            }
+            Err(_) => false,
+        }
+    };
+
+    let mut child = if use_sandbox {
+        let mut cmd = std::process::Command::new("bwrap");
+        cmd.args([
+            "--ro-bind",
+            "/",
+            "/",
+            "--dev",
+            "/dev",
+            "--proc",
+            "/proc",
+            "--unshare-all",
+            "--",
+            command_path,
+        ]);
+        cmd
+    } else {
+        std::process::Command::new(command_path)
+    };
+
+    let mut child = child
         .args(extra_args)
         .arg("--help")
-        .output()
-        .map_err(|e| anyhow::anyhow!("failed to run '{}': {}", command_path, e))?;
+        .env("PAGER", "cat")
+        .env("MANPAGER", "cat")
+        .env("SYSTEMD_PAGER", "cat")
+        .env("GIT_PAGER", "cat")
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("failed to spawn '{}': {}", command_path, e))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    let mut stdout_handle = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("failed to capture stdout"))?;
+    let mut stderr_handle = child
+        .stderr
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("failed to capture stderr"))?;
+
+    let stdout_thread = std::thread::spawn(move || {
+        let mut out = String::new();
+        let _ = std::io::Read::read_to_string(&mut stdout_handle, &mut out);
+        out
+    });
+
+    let stderr_thread = std::thread::spawn(move || {
+        let mut err = String::new();
+        let _ = std::io::Read::read_to_string(&mut stderr_handle, &mut err);
+        err
+    });
+
+    let timeout = std::time::Duration::from_millis(1500); // 1.5 seconds timeout
+    let start = std::time::Instant::now();
+    let mut exited = false;
+
+    while start.elapsed() < timeout {
+        if let Some(_status) = child
+            .try_wait()
+            .map_err(|e| anyhow::anyhow!("failed to wait: {}", e))?
+        {
+            exited = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+
+    if !exited {
+        let _ = child.kill();
+        let _ = child.wait();
+        anyhow::bail!("command '{}' timed out", command_path);
+    }
+
+    let stdout = stdout_thread
+        .join()
+        .map_err(|_| anyhow::anyhow!("stdout thread panicked"))?;
+    let stderr = stderr_thread
+        .join()
+        .map_err(|_| anyhow::anyhow!("stderr thread panicked"))?;
 
     // Some tools (e.g. git) write help to stdout when `--help` is passed as a
     // flag, but others write to stderr.  Prefer stdout when it has content.
@@ -414,9 +497,13 @@ pub fn generate_completion_script(
     command_path: &str,
     shell: clap_complete::Shell,
     strategy: SynthesisStrategy,
+    sandbox: bool,
 ) -> anyhow::Result<String> {
-    let parsed_cmd =
-        synthesize_completion(command_path, |args| run_help(command_path, args), strategy)?;
+    let parsed_cmd = synthesize_completion(
+        command_path,
+        |args| run_help(command_path, args, sandbox),
+        strategy,
+    )?;
     let cmd_name = command_basename(command_path);
 
     let mut clap_cmd = to_clap_command(&parsed_cmd);
