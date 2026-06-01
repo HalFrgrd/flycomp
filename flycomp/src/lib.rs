@@ -52,6 +52,50 @@ pub struct Command {
     pub subcommands: Vec<Command>,
 }
 
+impl Command {
+    pub fn expand_no_options(&mut self) {
+        let mut expanded_args = Vec::new();
+        for arg in std::mem::take(&mut self.args) {
+            if let Some(long) = &arg.long {
+                if long.contains("[no-]") {
+                    let base = long.replace("[no-]", "");
+                    let no_variant = long.replace("[no-]", "no-");
+
+                    let mut arg1 = arg.clone();
+                    arg1.long = Some(base);
+                    expanded_args.push(arg1);
+
+                    let mut arg2 = arg.clone();
+                    arg2.long = Some(no_variant);
+                    arg2.short = None;
+                    expanded_args.push(arg2);
+                } else if long.contains("[no]") {
+                    let base = long.replace("[no]", "");
+                    let no_variant = long.replace("[no]", "no");
+
+                    let mut arg1 = arg.clone();
+                    arg1.long = Some(base);
+                    expanded_args.push(arg1);
+
+                    let mut arg2 = arg.clone();
+                    arg2.long = Some(no_variant);
+                    arg2.short = None;
+                    expanded_args.push(arg2);
+                } else {
+                    expanded_args.push(arg);
+                }
+            } else {
+                expanded_args.push(arg);
+            }
+        }
+        self.args = expanded_args;
+
+        for sub in &mut self.subcommands {
+            sub.expand_no_options();
+        }
+    }
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Clap command conversion
 // ──────────────────────────────────────────────────────────────────────────────

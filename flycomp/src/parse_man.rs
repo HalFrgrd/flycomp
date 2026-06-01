@@ -272,7 +272,8 @@ fn find_value_type(remainder: &str) -> (Option<String>, Option<String>) {
 
 fn parse_alias(alias: &str) -> Option<ParsedOption> {
     let alias = alias.trim();
-    let caps = Regex::new(r"^(?P<option>--?[A-Za-z0-9#][A-Za-z0-9_-]*)(?P<rest>.*)$")
+    // Support options that contain brackets for negation, e.g. --[no-]color or --[no]color.
+    let caps = Regex::new(r"^(?P<option>--?(?:\[no\-?\])?[A-Za-z0-9#][A-Za-z0-9_-]*)(?P<rest>.*)$")
         .unwrap()
         .captures(alias)?;
     let option = caps.name("option").unwrap().as_str();
@@ -1070,7 +1071,13 @@ pub fn parse_manpage(cmd_name: &str, content: &str) -> Option<Command> {
         }
     }
 
-    if cmd.args.is_empty() { None } else { Some(cmd) }
+    if cmd.args.is_empty() {
+        None
+    } else {
+        // Expand bracketed negation flags (like --[no-]color) into both variants
+        cmd.expand_no_options();
+        Some(cmd)
+    }
 }
 
 #[cfg(test)]
@@ -2143,5 +2150,45 @@ None documented.
         };
         let ultra_arg = find_arg(&cmd, &ultra_item);
         assert_eq!(ultra_arg.long.as_deref(), Some("--ultra"));
+    }
+
+    #[test]
+    fn parses_manpage_with_negated_options() {
+        const FIXTURE: &str = r#".TH RAW 1
+.SH DESCRIPTION
+-p, --[no-]progress
+Forcibly show/hide the progress counter.
+
+--[no]asyncio
+Use asynchronous IO.
+"#;
+        let cmd = parse_manpage("raw", FIXTURE).unwrap();
+        let args = &cmd.args;
+
+        // --[no-]progress should expand to --progress and --no-progress
+        // Note: the negated variant --no-progress should NOT have a short flag.
+        let progress_base = args
+            .iter()
+            .find(|a| a.long.as_deref() == Some("--progress"))
+            .unwrap();
+        assert_eq!(progress_base.short.as_deref(), Some("-p"));
+
+        let progress_neg = args
+            .iter()
+            .find(|a| a.long.as_deref() == Some("--no-progress"))
+            .unwrap();
+        assert_eq!(progress_neg.short, None);
+
+        // --[no]asyncio should expand to --asyncio and --noasyncio
+        let asyncio_base = args
+            .iter()
+            .find(|a| a.long.as_deref() == Some("--asyncio"))
+            .unwrap();
+        let asyncio_neg = args
+            .iter()
+            .find(|a| a.long.as_deref() == Some("--noasyncio"))
+            .unwrap();
+        assert_eq!(asyncio_base.short, None);
+        assert_eq!(asyncio_neg.short, None);
     }
 }

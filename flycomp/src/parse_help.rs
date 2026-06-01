@@ -41,11 +41,14 @@ fn detect_format(help: &str) -> HelpFormat {
 /// The function auto-detects whether the string was produced by clap,
 /// Python argparse, or an unknown tool, and dispatches accordingly.
 pub fn parse_help(help: &str) -> Command {
-    match detect_format(help) {
+    let mut cmd = match detect_format(help) {
         HelpFormat::Clap => parse_help_clap(help),
         HelpFormat::Argparse => parse_help_argparse(help),
         HelpFormat::Generic => parse_help_generic(help),
-    }
+    };
+    // Expand bracketed negation flags (like --[no-]color) into both variants
+    cmd.expand_no_options();
+    cmd
 }
 
 /// Leading-space count for a line (tabs count as 1).
@@ -1866,6 +1869,29 @@ Benchmark options:
                 .as_ref()
                 .unwrap()
                 .contains("Spawn # compression threads")
+        );
+    }
+
+    #[test]
+    fn test_expand_no_options_in_help() {
+        const HELP: &str = r#"Usage: mytool [OPTIONS]
+
+Options:
+  --[no-]color             Enable or disable color output.
+  --[no]nocolor            Enable or disable nocolor option.
+"#;
+        let cmd = parse_help(HELP);
+        let args = &cmd.args;
+
+        // --[no-]color should expand to --color and --no-color
+        assert!(args.iter().any(|a| a.long.as_deref() == Some("--color")));
+        assert!(args.iter().any(|a| a.long.as_deref() == Some("--no-color")));
+
+        // --[no]nocolor should expand to --nocolor and --nonocolor
+        assert!(args.iter().any(|a| a.long.as_deref() == Some("--nocolor")));
+        assert!(
+            args.iter()
+                .any(|a| a.long.as_deref() == Some("--nonocolor"))
         );
     }
 }
