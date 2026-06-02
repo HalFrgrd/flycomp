@@ -67,6 +67,8 @@ pub struct Arg {
 pub struct Command {
     /// Name of the command, if known.
     pub name: Option<String>,
+    /// Subcommand aliases.
+    pub aliases: Vec<String>,
     /// Author / maintainer information, if present.
     pub author: Option<String>,
     /// Short description / about line.
@@ -145,6 +147,10 @@ pub fn to_clap_command(cmd: &Command) -> clap::Command {
         .disable_help_flag(true)
         .disable_help_subcommand(true)
         .disable_version_flag(true);
+
+    for alias in &cmd.aliases {
+        clap_cmd = clap_cmd.visible_alias(alias.clone());
+    }
 
     if let Some(desc) = &cmd.description {
         clap_cmd = clap_cmd.about(desc.clone());
@@ -458,7 +464,7 @@ fn find_subcommand_mut<'a>(root: &'a mut Command, path: &[String]) -> Option<&'a
 ///
 /// Many tools print their help to *stderr* rather than *stdout*; this function
 /// returns whichever stream is non-empty (preferring stdout).
-pub fn run_help(command_path: &str, extra_args: &[&str], sandbox: bool) -> anyhow::Result<String> {
+pub fn run_help(command_path: &str, extra_args: &[&str], sandbox: bool, timeout_ms: u64) -> anyhow::Result<String> {
     let use_sandbox = sandbox && {
         // Test if bwrap exists in PATH by trying to spawn it with --version
         match std::process::Command::new("bwrap")
@@ -535,7 +541,7 @@ pub fn run_help(command_path: &str, extra_args: &[&str], sandbox: bool) -> anyho
         err
     });
 
-    let timeout = std::time::Duration::from_millis(1500); // 1.5 seconds timeout
+    let timeout = std::time::Duration::from_millis(timeout_ms);
     let start = std::time::Instant::now();
     let mut exited = false;
 
@@ -579,10 +585,11 @@ pub fn generate_completion_script(
     shell: clap_complete::Shell,
     strategy: SynthesisStrategy,
     sandbox: bool,
+    timeout_ms: u64,
 ) -> anyhow::Result<String> {
     let parsed_cmd = synthesize_completion(
         command_path,
-        |args| run_help(command_path, args, sandbox),
+        |args| run_help(command_path, args, sandbox, timeout_ms),
         strategy,
     )?;
     let cmd_name = command_basename(command_path);
@@ -603,17 +610,18 @@ pub fn generate_completion_output(
     output: OutputFormat,
     strategy: SynthesisStrategy,
     sandbox: bool,
+    timeout_ms: u64,
 ) -> anyhow::Result<String> {
     if matches!(output, OutputFormat::Json) {
         let parsed_cmd = synthesize_completion(
             command_path,
-            |extra_args| run_help(command_path, extra_args, sandbox),
+            |extra_args| run_help(command_path, extra_args, sandbox, timeout_ms),
             strategy,
         )?;
         serde_json::to_string_pretty(&parsed_cmd).map_err(Into::into)
     } else {
         let shell = output.shell().expect("non-JSON output has shell mapping");
-        generate_completion_script(command_path, shell, strategy, sandbox)
+        generate_completion_script(command_path, shell, strategy, sandbox, timeout_ms)
     }
 }
 
@@ -647,11 +655,9 @@ mod tests {
             subcommands: vec![Command {
                 name: Some("sub".to_string()),
                 description: Some("A subcommand.".to_string()),
-                args: vec![],
-                subcommands: vec![],
-                author: None,
+                ..Command::default()
             }],
-            author: None,
+            ..Command::default()
         };
 
         let clap_cmd = to_clap_command(&cmd);
@@ -726,8 +732,7 @@ Options:
                     num_args: None,
                 },
             ],
-            subcommands: vec![],
-            author: None,
+            ..Command::default()
         };
 
         let mut clap_cmd = to_clap_command(&cmd);
@@ -765,8 +770,7 @@ Options:
                     num_args: None,
                 },
             ],
-            subcommands: vec![],
-            author: None,
+            ..Command::default()
         };
 
         let mut clap_cmd = to_clap_command(&cmd);
@@ -790,22 +794,15 @@ Options:
         // Build a two-level tree: root → child → grandchild.
         let mut root = Command {
             name: Some("root".to_string()),
-            description: None,
-            args: vec![],
             subcommands: vec![Command {
                 name: Some("child".to_string()),
-                description: None,
-                args: vec![],
                 subcommands: vec![Command {
                     name: Some("grandchild".to_string()),
-                    description: None,
-                    args: vec![],
-                    subcommands: vec![],
-                    author: None,
+                    ..Command::default()
                 }],
-                author: None,
+                ..Command::default()
             }],
-            author: None,
+            ..Command::default()
         };
 
         // Navigate to grandchild via find_subcommand_mut.
@@ -836,10 +833,7 @@ Options:
     fn test_find_subcommand_mut_missing() {
         let mut root = Command {
             name: Some("root".to_string()),
-            description: None,
-            args: vec![],
-            subcommands: vec![],
-            author: None,
+            ..Command::default()
         };
         // A path that doesn't exist should return None.
         let path = vec!["nonexistent".to_string()];
@@ -908,5 +902,22 @@ Options:
 
         // Cleanup
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_to_clap_command_subcommand_aliases() {
+        let cmd = Command {
+            name: Some("cargo".to_string()),
+            subcommands: vec![Command {
+                name: Some("build".to_string()),
+                aliases: vec!["b".to_string()],
+                ..Command::default()
+            }],
+            ..Command::default()
+        };
+        let clap_cmd = to_clap_command(&cmd);
+        let sub = clap_cmd.find_subcommand("build").unwrap();
+        let visible_aliases: Vec<&str> = sub.get_visible_aliases().collect();
+        assert_eq!(visible_aliases, vec!["b"]);
     }
 }

@@ -15,16 +15,54 @@ struct CliArgs {
     /// Run execution unsandboxed (bypass bubblewrap/bwrap sandboxing).
     #[arg(long)]
     no_sandbox: bool,
+    /// Timeout in milliseconds for running commands.
+    #[arg(long, default_value_t = 15000)]
+    timeout_ms: u64,
+    /// Log level to output to stderr (off, error, warn, info, debug, trace).
+    #[arg(long, default_value = "error")]
+    log_level: String,
 }
+
+struct SimpleLogger;
+
+impl log::Log for SimpleLogger {
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        true
+    }
+
+    fn log(&self, record: &log::Record) {
+        eprintln!("[{}] {}", record.level(), record.args());
+    }
+
+    fn flush(&self) {}
+}
+
+static LOGGER: SimpleLogger = SimpleLogger;
 
 fn main() -> anyhow::Result<()> {
     let args = CliArgs::parse();
+
+    let log_level = match args.log_level.to_lowercase().as_str() {
+        "off" => log::LevelFilter::Off,
+        "error" => log::LevelFilter::Error,
+        "warn" => log::LevelFilter::Warn,
+        "info" => log::LevelFilter::Info,
+        "debug" => log::LevelFilter::Debug,
+        "trace" => log::LevelFilter::Trace,
+        _ => anyhow::bail!("invalid log level: {}", args.log_level),
+    };
+
+    if log_level != log::LevelFilter::Off {
+        let _ = log::set_logger(&LOGGER);
+        log::set_max_level(log_level);
+    }
 
     let output = flycomp::generate_completion_output(
         &args.command,
         args.output,
         args.strategy,
         !args.no_sandbox,
+        args.timeout_ms,
     )?;
     print!("{}", output);
 

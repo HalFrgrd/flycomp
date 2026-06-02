@@ -199,7 +199,13 @@ pub fn parse_help_clap(help: &str) -> Command {
     while i < lines.len() {
         let trimmed = lines[i].trim();
 
-        if trimmed == "Commands:" || trimmed == "Subcommands:" || trimmed == "Available Commands:" {
+        let lower = trimmed.to_lowercase();
+        let is_commands_section = trimmed == "Commands:"
+            || trimmed == "Subcommands:"
+            || trimmed == "Available Commands:"
+            || (lower.contains("commands") && (trimmed.ends_with(':') || lower.contains("commands are")));
+
+        if is_commands_section {
             i += 1;
             while i < lines.len() {
                 let line = lines[i];
@@ -212,14 +218,21 @@ pub fn parse_help_clap(help: &str) -> Command {
                 }
                 let trimmed_line = line.trim();
                 let mut parts = trimmed_line.splitn(2, "  ");
-                let sub_name = parts.next().unwrap_or("").trim().to_string();
+                let sub_names_part = parts.next().unwrap_or("").trim();
                 let sub_desc = parts.next().map(|s| s.trim().to_string());
-                if !sub_name.is_empty() {
-                    cmd.subcommands.push(Command {
-                        name: Some(sub_name),
-                        description: sub_desc,
-                        ..Command::default()
-                    });
+                if !sub_names_part.is_empty() {
+                    let mut name_iter = sub_names_part.split(',').map(|s| s.trim().to_string());
+                    if let Some(first_name) = name_iter.next() {
+                        if !first_name.is_empty() {
+                            let aliases: Vec<String> = name_iter.filter(|s| !s.is_empty()).collect();
+                            cmd.subcommands.push(Command {
+                                name: Some(first_name),
+                                aliases,
+                                description: sub_desc,
+                                ..Command::default()
+                            });
+                        }
+                    }
                 }
                 i += 1;
             }
@@ -801,6 +814,19 @@ See 'cargo help <command>' for more information on a specific command.
             arg_by_long(&cmd, "--color").and_then(|a| a.value_type.as_deref()),
             Some("WHEN")
         );
+
+        let subs = subcommand_names(&cmd);
+        assert!(subs.contains(&"build"));
+        assert!(subs.contains(&"check"));
+        assert!(subs.contains(&"clean"));
+
+        let build_sub = subcommand_by_name(&cmd, "build").unwrap();
+        assert_eq!(build_sub.aliases, vec!["b".to_string()]);
+        assert_eq!(build_sub.description.as_deref(), Some("Compile the current package"));
+
+        let check_sub = subcommand_by_name(&cmd, "check").unwrap();
+        assert_eq!(check_sub.aliases, vec!["c".to_string()]);
+        assert_eq!(check_sub.description.as_deref(), Some("Analyze the current package and report errors, but don't build object files"));
     }
 
     const PYTHON_HELP: &str = r#"usage: python3 [option] ... [-c cmd | -m mod | file | -] [arg] ...

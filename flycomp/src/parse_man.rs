@@ -993,6 +993,7 @@ fn add_subcommand(cmd: &mut Command, name: &str, description: &str) -> bool {
 
     cmd.subcommands.push(Command {
         name: Some(name.to_string()),
+        aliases: Vec::new(),
         description: if description.is_empty() {
             None
         } else {
@@ -1045,6 +1046,7 @@ fn parse_subcommands(cmd: &mut Command, content: &str) -> bool {
 pub fn parse_manpage(cmd_name: &str, content: &str) -> Option<Command> {
     let mut cmd = Command {
         name: Some(cmd_name.to_string()),
+        aliases: Vec::new(),
         description: None,
         args: Vec::new(),
         subcommands: Vec::new(),
