@@ -931,7 +931,10 @@ Options:
     #[test]
     fn test_run_help_in_cwd() {
         use std::io::Write;
-        let temp_dir = std::env::current_dir().unwrap().join("target").join("test_run_help_cwd");
+        let temp_dir = std::env::current_dir()
+            .unwrap()
+            .join("target")
+            .join("test_run_help_cwd");
         std::fs::create_dir_all(&temp_dir).unwrap();
         let cmd_path = temp_dir.join("dummy_cmd");
 
