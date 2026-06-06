@@ -483,17 +483,70 @@ fn top_level_sections(content: &str) -> Vec<&str> {
 
 fn parse_type1_blocks(cmd: &mut Command, section: &str) -> bool {
     let mut found = false;
-    let re = Regex::new(r"(?ms)\.PP(.*?)\.RE").unwrap();
     let cmd_name = cmd.name.clone().unwrap_or_default();
 
-    for caps in re.captures_iter(section) {
-        let mut data = caps.get(1).unwrap().as_str().to_string();
-        if let Some(idx) = data.rfind(".PP") {
-            data = data[idx + 3..].to_string();
-        }
-        let parts: Vec<&str> = data.splitn(2, ".RS 4").collect();
-        if parts.len() == 2 && looks_like_option_block(parts[0], &cmd_name) {
-            found |= add_option(cmd, parts[0], parts[1]);
+    let lines: Vec<&str> = section.lines().collect();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let line = lines[i].trim();
+        if line.starts_with(".PP")
+            || line.starts_with(".sp")
+            || line.starts_with(".SS")
+            || line.starts_with(".Ss")
+        {
+            let mut opt_lines = Vec::new();
+            i += 1;
+
+            let mut rs_found = false;
+            while i < lines.len() {
+                let next_line = lines[i].trim();
+                if next_line.starts_with(".RS") {
+                    rs_found = true;
+                    break;
+                }
+                if next_line.starts_with(".PP")
+                    || next_line.starts_with(".sp")
+                    || next_line.starts_with(".SS")
+                    || next_line.starts_with(".Ss")
+                {
+                    break;
+                }
+                opt_lines.push(lines[i]);
+                i += 1;
+            }
+
+            if rs_found {
+                i += 1; // skip .RS
+                let mut desc_lines = Vec::new();
+                let mut nesting = 1;
+
+                while i < lines.len() && nesting > 0 {
+                    let next_line = lines[i].trim();
+                    if next_line.starts_with(".RS") {
+                        nesting += 1;
+                    } else if next_line.starts_with(".RE") {
+                        nesting -= 1;
+                    }
+                    if nesting > 0 {
+                        desc_lines.push(lines[i]);
+                        i += 1;
+                    }
+                }
+
+                if nesting == 0 {
+                    let option_text = opt_lines.join("\n");
+                    let description = desc_lines.join("\n");
+
+                    if looks_like_option_block(&option_text, &cmd_name) {
+                        found |= add_option(cmd, &option_text, &description);
+                    }
+                    i += 1; // skip .RE
+                    continue;
+                }
+            }
+        } else {
+            i += 1;
         }
     }
 
@@ -1020,6 +1073,39 @@ fn extract_subcommand_candidates(section: &str, cmd_name: &str) -> Vec<(String, 
         candidates.push((name, raw_description.to_string()));
     }
 
+    if candidates.is_empty() {
+        let lines: Vec<&str> = section.lines().collect();
+        let mut i = 0;
+        while i < lines.len() {
+            let line = lines[i].trim();
+            if let Some(name) = parse_subcommand_name(cmd_name, line) {
+                i += 1;
+                if i < lines.len() && lines[i].trim() == ".br" {
+                    i += 1;
+                }
+
+                let mut desc_parts = Vec::new();
+                while i < lines.len() {
+                    let next_line = lines[i].trim();
+                    if next_line.starts_with(".sp")
+                        || next_line.starts_with(".SS")
+                        || next_line.starts_with(".SH")
+                        || parse_subcommand_name(cmd_name, next_line).is_some()
+                    {
+                        break;
+                    }
+                    if !next_line.is_empty() {
+                        desc_parts.push(next_line);
+                    }
+                    i += 1;
+                }
+                candidates.push((name, desc_parts.join("\n")));
+            } else {
+                i += 1;
+            }
+        }
+    }
+
     candidates
 }
 
@@ -1032,7 +1118,16 @@ fn parse_subcommands(cmd: &mut Command, content: &str) -> bool {
 
     for section in top_level_sections(content) {
         let candidates = extract_subcommand_candidates(section, &cmd_name);
-        if candidates.len() < 3 {
+        let is_commands_section = section
+            .lines()
+            .next()
+            .map(|l| {
+                let upper = l.to_uppercase();
+                upper.contains("COMMAND") || upper.contains("SUBCOMMAND")
+            })
+            .unwrap_or(false);
+
+        if !is_commands_section && candidates.len() < 3 {
             continue;
         }
 
@@ -1044,7 +1139,7 @@ fn parse_subcommands(cmd: &mut Command, content: &str) -> bool {
     found
 }
 
-pub fn parse_manpage(cmd_name: &str, content: &str) -> Option<Command> {
+fn parse_manpage_base(cmd_name: &str, content: &str) -> Option<Command> {
     let mut cmd = Command {
         name: Some(cmd_name.to_string()),
         aliases: Vec::new(),
@@ -1074,13 +1169,72 @@ pub fn parse_manpage(cmd_name: &str, content: &str) -> Option<Command> {
         }
     }
 
-    if cmd.args.is_empty() {
+    if cmd.args.is_empty() && cmd.subcommands.is_empty() {
         None
     } else {
         // Expand bracketed negation flags (like --[no-]color) into both variants
         cmd.expand_no_options();
         cmd.populate_possible_values();
         Some(cmd)
+    }
+}
+
+pub fn parse_manpage(cmd_name: &str, content: &str) -> Option<Command> {
+    parse_manpage_base(cmd_name, content)
+}
+
+pub fn parse_manpage_recursive<F>(
+    cmd_name: &str,
+    content: &str,
+    max_depth: usize,
+    loader: &F,
+) -> Option<Command>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let mut cmd = parse_manpage_base(cmd_name, content)?;
+    let mut cmd_path = vec![cmd_name.to_string()];
+    parse_manpage_recursive_impl(&mut cmd, &mut cmd_path, max_depth, loader);
+    Some(cmd)
+}
+
+fn parse_manpage_recursive_impl<F>(
+    cmd: &mut Command,
+    cmd_path: &mut Vec<String>,
+    max_depth: usize,
+    loader: &F,
+) where
+    F: Fn(&str) -> Option<String>,
+{
+    if cmd_path.len() - 1 >= max_depth {
+        return;
+    }
+
+    let num_subcommands = cmd.subcommands.len();
+    for idx in 0..num_subcommands {
+        let sub_name = match &cmd.subcommands[idx].name {
+            Some(n) => n.clone(),
+            None => continue,
+        };
+
+        cmd_path.push(sub_name.clone());
+        let sub_man_name = cmd_path.join("-");
+
+        if let Some(sub_content) = loader(&sub_man_name) {
+            if let Some(parsed_sub) = parse_manpage_base(&sub_man_name, &sub_content) {
+                let target = &mut cmd.subcommands[idx];
+                target.args = parsed_sub.args;
+                if target.description.is_none()
+                    || target.description.as_deref().unwrap_or("").is_empty()
+                {
+                    target.description = parsed_sub.description;
+                }
+                target.subcommands = parsed_sub.subcommands;
+
+                parse_manpage_recursive_impl(target, cmd_path, max_depth, loader);
+            }
+        }
+        cmd_path.pop();
     }
 }
 
@@ -1157,6 +1311,21 @@ None documented.
         let content = fs::read_to_string(format!("../tests/man_pages/{name}")).unwrap();
         let cmd_name = name.split('.').next().unwrap();
         parse_manpage(cmd_name, &content).unwrap()
+    }
+
+    fn parse_test_manpage_recursive(name: &str, max_depth: usize) -> Command {
+        let content = fs::read_to_string(format!("../tests/man_pages/{name}")).unwrap();
+        let cmd_name = name.split('.').next().unwrap();
+        let loader = |sub_man_name: &str| -> Option<String> {
+            if let Ok(c) = fs::read_to_string(format!("../tests/man_pages/{sub_man_name}.1")) {
+                return Some(c);
+            }
+            if let Ok(c) = fs::read_to_string(format!("../tests/man_pages/{sub_man_name}.8")) {
+                return Some(c);
+            }
+            None
+        };
+        parse_manpage_recursive(cmd_name, &content, max_depth, &loader).unwrap()
     }
 
     #[test]
@@ -3020,16 +3189,35 @@ Use asynchronous IO.
         assert_expected_subcommands(
             &cmd,
             &[
-                ("repo", "Manage repositories"),
-                ("pr", "Manage pull requests"),
-                ("issue", "Manage issues"),
+                ("auth", "Authenticate gh and git with GitHub"),
+                ("browse", "Open the repository in the browser"),
+                ("codespace", "Connect to and manage codespaces"),
                 ("gist", "Manage gists"),
-                ("alias", "Manage command aliases"),
-                ("api", "authenticated API request"),
-                ("auth", "Authenticate with GitHub"),
-                ("completion", "Generate shell completion"),
-                ("config", "Manage configuration"),
-                ("run", "workflow runs"),
+                ("issue", "Manage issues"),
+                ("org", "Manage organizations"),
+                ("pr", "Manage pull requests"),
+                ("project", "Work with GitHub Projects"),
+                ("release", "Manage releases"),
+                ("repo", "Manage repositories"),
+                ("cache", "Manage Github Actions caches"),
+                ("run", "View details about workflow runs"),
+                ("workflow", "View details about GitHub Actions workflows"),
+                ("alias", "Create command shortcuts"),
+                ("api", "Make an authenticated GitHub API request"),
+                ("completion", "Generate shell completion scripts"),
+                ("config", "Manage configuration for gh"),
+                ("extension", "Manage gh extensions"),
+                ("gpg-key", "Manage GPG keys"),
+                ("label", "Manage labels"),
+                ("ruleset", "View info about repo rulesets"),
+                (
+                    "search",
+                    "Search for repositories, issues, and pull requests",
+                ),
+                ("secret", "Manage GitHub secrets"),
+                ("ssh-key", "Manage SSH keys"),
+                ("status", "Print information about relevant issues"),
+                ("variable", "Manage GitHub Actions variables"),
             ],
         );
         assert_contains_expected_args(
@@ -3272,6 +3460,310 @@ Use asynchronous IO.
                     description_contains: "leading slashes",
                 },
             ],
+        );
+    }
+
+    #[test]
+    fn parses_real_cargo_fixture() {
+        let cmd = parse_test_manpage("cargo.1");
+        assert_expected_subcommands(
+            &cmd,
+            &[
+                ("bench", "Execute benchmarks"),
+                ("build", "Compile a package"),
+                ("check", "Check a local package"),
+                ("clean", "Remove artifacts"),
+                ("doc", "Build a package"),
+                ("fetch", "Fetch dependencies"),
+                ("fix", "Automatically fix lint"),
+                ("run", "Run a binary"),
+                ("rustc", "Compile a package"),
+                ("rustdoc", "Build a package"),
+                ("test", "Execute unit"),
+                ("add", "Add dependencies"),
+                ("generate-lockfile", "Generate Cargo"),
+                ("info", "Display information"),
+                ("locate-project", "Print a JSON"),
+                ("metadata", "Output the resolved"),
+                ("pkgid", "Print a fully qualified"),
+                ("remove", "Remove dependencies"),
+                ("tree", "Display a tree"),
+                ("update", "Update dependencies"),
+                ("vendor", "Vendor all"),
+                ("init", "Create a new Cargo"),
+                ("install", "Build and install"),
+                ("new", "Create a new Cargo"),
+                ("search", "Search packages"),
+                ("uninstall", "Remove a Rust"),
+                ("login", "Save an API"),
+                ("logout", "Remove an API"),
+                ("owner", "Manage the owners"),
+                ("package", "Assemble the local"),
+                ("publish", "Upload a package"),
+                ("yank", "Remove a pushed"),
+                ("report", "Generate and display"),
+                ("report-future-incompatibilities", "Reports any crates"),
+                ("help", "Display help"),
+                ("version", "Show version"),
+            ],
+        );
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-V".to_string()),
+                        long: Some("--version".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        value_enum: None,
+                        value_hint: crate::ValueHint::Unknown,
+                        description: None,
+                    },
+                    description_contains: "Print version info",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--explain".to_string()),
+                        value_name: Some("code".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: None,
+                        value_hint: crate::ValueHint::Unknown,
+                        description: None,
+                    },
+                    description_contains: "Run rustc --explain",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: Some("--verbose".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        value_enum: None,
+                        value_hint: crate::ValueHint::Unknown,
+                        description: None,
+                    },
+                    description_contains: "Use verbose output",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-q".to_string()),
+                        long: Some("--quiet".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        value_enum: None,
+                        value_hint: crate::ValueHint::Unknown,
+                        description: None,
+                    },
+                    description_contains: "Do not print cargo log messages",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--color".to_string()),
+                        value_name: Some("when".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: None,
+                        value_hint: crate::ValueHint::Unknown,
+                        description: None,
+                    },
+                    description_contains: "Control when colored output is used",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--locked".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        value_enum: None,
+                        value_hint: crate::ValueHint::Unknown,
+                        description: None,
+                    },
+                    description_contains: "Asserts that the exact same dependencies",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--offline".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        value_enum: None,
+                        value_hint: crate::ValueHint::Unknown,
+                        description: None,
+                    },
+                    description_contains: "Prevents Cargo from accessing the network",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--frozen".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        value_enum: None,
+                        value_hint: crate::ValueHint::Unknown,
+                        description: None,
+                    },
+                    description_contains: "Equivalent to specifying both",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--config".to_string()),
+                        value_name: Some("KEY=VALUE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: None,
+                        value_hint: crate::ValueHint::AnyPath,
+                        description: None,
+                    },
+                    description_contains: "Overrides a Cargo configuration value",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-C".to_string()),
+                        long: None,
+                        value_name: Some("PATH".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: None,
+                        value_hint: crate::ValueHint::DirPath,
+                        description: None,
+                    },
+                    description_contains: "Changes the current working directory",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-h".to_string()),
+                        long: Some("--help".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        value_enum: None,
+                        value_hint: crate::ValueHint::Unknown,
+                        description: None,
+                    },
+                    description_contains: "Prints help information",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-Z".to_string()),
+                        long: None,
+                        value_name: Some("flag".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: None,
+                        value_hint: crate::ValueHint::Unknown,
+                        description: None,
+                    },
+                    description_contains: "Unstable (nightly-only) flags",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn parses_manpage_recursive_fixture() {
+        // Test Cargo recursion: cargo -> cargo-build, cargo-check, cargo-clean
+        let cmd = parse_test_manpage_recursive("cargo.1", 5);
+
+        // Find the "build" subcommand of cargo
+        let build_sub = cmd
+            .subcommands
+            .iter()
+            .find(|s| s.name.as_deref() == Some("build"))
+            .expect("cargo should have 'build' subcommand");
+
+        // Asserts that the recursively parsed subcommand "build" has options from cargo-build.1
+        assert_contains_expected_args(
+            build_sub,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-p".to_string()),
+                        long: Some("--package".to_string()),
+                        value_name: Some("spec\\[u2026".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: None,
+                        value_hint: crate::ValueHint::Unknown,
+                        description: None,
+                    },
+                    description_contains: "Build only the specified packages",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: Some("--release".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        value_enum: None,
+                        value_hint: crate::ValueHint::Unknown,
+                        description: None,
+                    },
+                    description_contains: "Build optimized artifacts",
+                },
+            ],
+        );
+
+        // Find the "check" subcommand of cargo
+        let check_sub = cmd
+            .subcommands
+            .iter()
+            .find(|s| s.name.as_deref() == Some("check"))
+            .expect("cargo should have 'check' subcommand");
+
+        // Asserts check options are populated
+        assert!(
+            check_sub
+                .args
+                .iter()
+                .any(|a| a.long.as_deref() == Some("--profile"))
+        );
+
+        // Test GH recursion: gh -> gh-codespace -> gh-codespace-cp
+        let gh_cmd = parse_test_manpage_recursive("gh.1", 5);
+
+        let codespace_sub = gh_cmd
+            .subcommands
+            .iter()
+            .find(|s| s.name.as_deref() == Some("codespace"))
+            .expect("gh should have 'codespace' subcommand");
+
+        // Asserts gh-codespace options are populated from gh-codespace.1
+        assert_contains_expected_args(
+            codespace_sub,
+            &[ExpectedArg {
+                arg: Arg {
+                    short: Some("-c".to_string()),
+                    long: Some("--codespace".to_string()),
+                    value_name: Some("<name>".to_string()),
+                    num_args: Some("1".to_string()),
+                    value_enum: None,
+                    value_hint: crate::ValueHint::Unknown,
+                    description: None,
+                },
+                description_contains: "Name of the codespace",
+            }],
+        );
+
+        // gh-codespace should have nested subcommand "cp" from gh-codespace.1
+        let cp_sub = codespace_sub
+            .subcommands
+            .iter()
+            .find(|s| s.name.as_deref() == Some("cp"))
+            .expect("gh codespace should have 'cp' subcommand");
+
+        // gh codespace cp should have options from gh-codespace-cp.1 (recursive!)
+        assert_contains_expected_args(
+            cp_sub,
+            &[ExpectedArg {
+                arg: Arg {
+                    short: Some("-r".to_string()),
+                    long: Some("--recursive".to_string()),
+                    value_name: None,
+                    num_args: None,
+                    value_enum: None,
+                    value_hint: crate::ValueHint::Unknown,
+                    description: None,
+                },
+                description_contains: "Recursively copy directories",
+            }],
         );
     }
 }
