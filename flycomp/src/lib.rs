@@ -50,6 +50,30 @@ impl OutputFormat {
 // Public data structures
 // ──────────────────────────────────────────────────────────────────────────────
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum ValueHint {
+    #[default]
+    Unknown,
+    Other,
+    AnyPath,
+    FilePath,
+    DirPath,
+    ExecutablePath,
+    CommandName,
+    CommandString,
+    CommandWithArguments,
+    Username,
+    Hostname,
+    Url,
+    EmailAddress,
+    EnvVar,
+    NetworkInterface,
+    GitBranch,
+    GitRevision,
+    SystemdUnit,
+}
+
 /// A single command-line argument / flag.
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
 pub struct Arg {
@@ -59,12 +83,14 @@ pub struct Arg {
     pub short: Option<String>,
     /// Human-readable description.
     pub description: Option<String>,
-    /// Meta-variable / value type hint (e.g. `<PATH>`, `<N>`).
-    pub value_type: Option<String>,
+    /// Meta-variable / value name hint (e.g. `<PATH>`, `<N>`).
+    pub value_name: Option<String>,
     /// Number of values accepted (e.g. `*`, `+`, `?`, or a count like `"1"`).
     pub num_args: Option<String>,
     /// Possible values for the option.
-    pub possible_values: Option<Vec<String>>,
+    pub value_enum: Option<Vec<String>>,
+    /// Completion hint for the option value.
+    pub value_hint: ValueHint,
 }
 
 /// A parsed command (or sub-command).
@@ -163,9 +189,13 @@ impl Command {
 
     pub fn populate_possible_values(&mut self) {
         for arg in &mut self.args {
-            if arg.possible_values.is_none() {
-                arg.possible_values =
-                    parse_possible_values(arg.value_type.as_deref(), arg.description.as_deref());
+            if arg.value_enum.is_none() {
+                arg.value_enum =
+                    parse_possible_values(arg.value_name.as_deref(), arg.description.as_deref());
+            }
+            if arg.value_hint == ValueHint::Unknown {
+                arg.value_hint =
+                    extract_value_hint(arg.value_name.as_deref(), arg.description.as_deref());
             }
         }
         for sub in &mut self.subcommands {
@@ -174,13 +204,272 @@ impl Command {
     }
 }
 
+pub fn extract_value_hint(value_name: Option<&str>, description: Option<&str>) -> ValueHint {
+    let name_lower = value_name.map(|s| s.to_lowercase());
+    let desc_lower = description.map(|s| s.to_lowercase());
+
+    // Helper to check if name contains a substring
+    let name_contains = |substring: &str| {
+        if let Some(ref name) = name_lower {
+            name.contains(substring)
+        } else {
+            false
+        }
+    };
+
+    // Helper to check if desc contains a substring
+    let desc_contains = |substring: &str| {
+        if let Some(ref desc) = desc_lower {
+            desc.contains(substring)
+        } else {
+            false
+        }
+    };
+
+    // 1. Check value_name first (high precision)
+    if name_contains("url") || name_contains("uri") {
+        return ValueHint::Url;
+    }
+    if name_contains("email") {
+        return ValueHint::EmailAddress;
+    }
+    if name_contains("hostname")
+        || name_contains("host")
+        || name_contains("domain")
+        || name_contains("address")
+    {
+        return ValueHint::Hostname;
+    }
+    if name_contains("username") || name_contains("user_name") || name_contains("user-name") {
+        return ValueHint::Username;
+    }
+    if name_contains("command") || name_contains("cmd") {
+        if name_contains("line") || name_contains("string") {
+            return ValueHint::CommandString;
+        }
+        return ValueHint::CommandName;
+    }
+    if name_contains("executable") || name_contains("binary") {
+        return ValueHint::ExecutablePath;
+    }
+    if name_contains("dir") || name_contains("directory") || name_contains("folder") {
+        return ValueHint::DirPath;
+    }
+    if name_contains("env-var") || name_contains("envvar") || name_contains("env_var") {
+        return ValueHint::EnvVar;
+    }
+    if name_contains("interface") || name_contains("iface") {
+        return ValueHint::NetworkInterface;
+    }
+    if name_contains("branch") {
+        return ValueHint::GitBranch;
+    }
+    if name_contains("revision") || name_contains("commit") {
+        return ValueHint::GitRevision;
+    }
+    if name_contains("service") || name_contains("unit") {
+        return ValueHint::SystemdUnit;
+    }
+    // Dict, Log, Archive, and File are FilePaths
+    if name_contains("file")
+        || name_contains("filename")
+        || name_contains("filepath")
+        || name_contains("dict")
+        || name_contains("dictionary")
+        || name_contains("log")
+        || name_contains("archive")
+    {
+        // Exclude "level" to avoid "log-level" or "log_level" matching file
+        if !name_contains("level") {
+            return ValueHint::FilePath;
+        }
+    }
+    if name_contains("path") {
+        if desc_contains("directory") || desc_contains("folder") {
+            return ValueHint::DirPath;
+        }
+        if desc_contains("file") && !desc_contains("files") {
+            return ValueHint::FilePath;
+        }
+        return ValueHint::AnyPath;
+    }
+    if name_contains("unix:") || name_contains("socket") {
+        return ValueHint::AnyPath;
+    }
+
+    // 2. Check description (lower precision, needs more specific phrases)
+    if desc_contains("http://")
+        || desc_contains("https://")
+        || desc_contains("url")
+        || desc_contains("uri")
+        || desc_contains("endpoint")
+    {
+        return ValueHint::Url;
+    }
+    if desc_contains("email") || desc_contains("e-mail") {
+        return ValueHint::EmailAddress;
+    }
+    if desc_contains("hostname")
+        || desc_contains("host name")
+        || desc_contains("domain name")
+        || desc_contains("ip address")
+        || desc_contains("ipv4")
+        || desc_contains("ipv6")
+        || desc_contains("dns name")
+        || desc_contains("target host")
+        || desc_contains("remote host")
+        || desc_contains("server address")
+    {
+        return ValueHint::Hostname;
+    }
+    if desc_contains("username") || desc_contains("user name") || desc_contains("login name") {
+        return ValueHint::Username;
+    }
+    if desc_contains("command line") || desc_contains("command-line") {
+        return ValueHint::CommandString;
+    }
+    if desc_contains("command name") || desc_contains("cmd name") {
+        return ValueHint::CommandName;
+    }
+    if desc_contains("path to executable")
+        || desc_contains("path to binary")
+        || desc_contains("path to command")
+        || desc_contains("executable file")
+        || desc_contains("binary file")
+    {
+        return ValueHint::ExecutablePath;
+    }
+    if desc_contains("environment variable")
+        || desc_contains("env variable")
+        || desc_contains("env-var")
+    {
+        return ValueHint::EnvVar;
+    }
+    if desc_contains("network interface") {
+        return ValueHint::NetworkInterface;
+    }
+    if desc_contains("git branch") {
+        return ValueHint::GitBranch;
+    }
+    if desc_contains("git revision") || desc_contains("git commit") {
+        return ValueHint::GitRevision;
+    }
+    if desc_contains("systemd service") || desc_contains("systemd unit") {
+        return ValueHint::SystemdUnit;
+    }
+
+    // Paths/Directories/Files in description
+    if desc_contains("directory path")
+        || desc_contains("folder path")
+        || desc_contains("path to directory")
+        || desc_contains("path to folder")
+    {
+        return ValueHint::DirPath;
+    }
+    if desc_contains("file path")
+        || desc_contains("path to file")
+        || desc_contains("filename")
+        || desc_contains("file name")
+        || desc_contains("dictionary file")
+        || desc_contains("log file")
+    {
+        return ValueHint::FilePath;
+    }
+    if desc_contains("path to the chosen file") || desc_contains("write traces to") {
+        return ValueHint::FilePath;
+    }
+    if desc_contains("path to") {
+        return ValueHint::AnyPath;
+    }
+
+    // Specific heuristics:
+    // If the name is "output" or "input" or "filelist" or "list" or "destination" or "source", and description mentions "file"
+    if let Some(ref name) = name_lower {
+        if name == "output"
+            || name == "input"
+            || name == "filelist"
+            || name == "list"
+            || name == "destination"
+            || name == "source"
+            || name == "rfile"
+            || name == "debug-file"
+        {
+            if desc_contains("directory") || desc_contains("folder") || desc_contains("dir") {
+                return ValueHint::DirPath;
+            }
+            if desc_contains("file")
+                || desc_contains("path")
+                || desc_contains("output")
+                || desc_contains("write")
+                || desc_contains("read")
+            {
+                return ValueHint::FilePath;
+            }
+        }
+        if name == "dir" || name == "directory" || name == "folder" || name == "path" {
+            return ValueHint::DirPath;
+        }
+    }
+
+    ValueHint::Unknown
+}
+
+fn parse_bulleted_list_values(desc: &str) -> Option<Vec<String>> {
+    let mut values = Vec::new();
+
+    // Pattern 1: Bullet + value + separator (like ':' or ' - ' or 2+ spaces)
+    let re_bullet_sep =
+        regex::Regex::new(r"(?:^|\s)[-*+o•]\s+([a-zA-Z0-9_-]+)(?:\s*:\s+|\s+-\s+|[ \t]{2,})")
+            .unwrap();
+    for caps in re_bullet_sep.captures_iter(desc) {
+        let val = caps.get(1).unwrap().as_str().to_string();
+        if !values.contains(&val) {
+            values.push(val);
+        }
+    }
+
+    if !values.is_empty() {
+        return Some(values);
+    }
+
+    // Pattern 2: Pure bullet + word lines anywhere in the description
+    let re_bullet_pure = regex::Regex::new(r"^\s*[-*+o•]\s+([a-zA-Z0-9_-]+)\s*$").unwrap();
+    let mut pure_vals = Vec::new();
+    for line in desc.lines() {
+        if let Some(caps) = re_bullet_pure.captures(line) {
+            let val = caps.get(1).unwrap().as_str().to_string();
+            if !pure_vals.contains(&val) {
+                pure_vals.push(val);
+            }
+        }
+    }
+
+    if pure_vals.len() >= 2 {
+        return Some(pure_vals);
+    }
+
+    None
+}
+
 pub fn parse_possible_values(
-    value_type: Option<&str>,
+    value_name: Option<&str>,
     description: Option<&str>,
 ) -> Option<Vec<String>> {
-    // 1. Try to parse from value_type (e.g. {info,debug} or info|debug)
-    if let Some(vt) = value_type {
+    // 1. Try to parse from value_name (e.g. {info,debug} or info|debug or 0..5)
+    if let Some(vt) = value_name {
         let clean_type = vt.trim_matches(|c| c == '[' || c == ']' || c == '<' || c == '>');
+
+        // Try range syntax like 0..5 or 1-5
+        let range_re = regex::Regex::new(r"^(\d+)(?:\.\.|-)(\d+)$").unwrap();
+        if let Some(caps) = range_re.captures(clean_type) {
+            let start: usize = caps.get(1).unwrap().as_str().parse().unwrap_or(0);
+            let end: usize = caps.get(2).unwrap().as_str().parse().unwrap_or(0);
+            if start < end && end - start <= 20 {
+                let range_values: Vec<String> = (start..=end).map(|val| val.to_string()).collect();
+                return Some(range_values);
+            }
+        }
+
         if clean_type.starts_with('{') && clean_type.ends_with('}') {
             let inner = &clean_type[1..clean_type.len() - 1];
             let parts: Vec<String> = inner
@@ -210,9 +499,12 @@ pub fn parse_possible_values(
 
     // 2. Try to parse from description
     if let Some(desc) = description {
+        if let Some(list_vals) = parse_bulleted_list_values(desc) {
+            return Some(list_vals);
+        }
         // regex to find the prefix
         let re_prefix = regex::Regex::new(
-            r"(?i)\b(?:possible\s+values|choices|allowed\s+values|valid\s+values|one\s+of|accepts)\s*(?:=|:|\bare\b)\s*|\bmust\s+be\s+(?:either\s+|one\s+of\s+)?(?:=|:)?\s*"
+            r"(?i)\b(?:possible\s+values|choices|allowed\s+values|valid\s+values|one\s+of|accepts|can\s+be|selected\s+from)\s*(?:=|:|\bare\b)?\s*|\bmust\s+be\s+(?:either\s+|one\s+of\s+)?(?:=|:)?\s*"
         ).unwrap();
 
         if let Some(mat) = re_prefix.find(desc) {
@@ -273,15 +565,15 @@ pub fn parse_possible_values(
     // 3. Heuristic: if we find a list and a mention of "default: x" where x is in that list.
     if let Some(desc) = description {
         let re_default = regex::Regex::new(
-            r#"(?i)[(\[]?\bdefault\s*(?::|is)\s*['"`]?([a-zA-Z0-9\-_]+)['"`]?[)\]]?"#
+            r#"(?i)[(\[]?\bdefault\s*(?::|is)\s*['"`]?([a-zA-Z0-9\-_]+)['"`]?[)\]]?"#,
         )
         .unwrap();
 
         for caps in re_default.captures_iter(desc) {
             let default_val = caps.get(1).unwrap().as_str();
 
-            let segments: Vec<&str> =
-                desc.split(|c| c == '.' || c == ';' || c == '(' || c == ')' || c == '[' || c == ']')
+            let segments: Vec<&str> = desc
+                .split(|c| c == '.' || c == ';' || c == '(' || c == ')' || c == '[' || c == ']')
                 .collect();
 
             // Also split by "default" itself if it's not already a separator
@@ -460,13 +752,13 @@ pub fn to_clap_command(cmd: &Command) -> clap::Command {
             clap_arg = clap_arg.help(desc.clone());
         }
 
-        if let Some(value_type) = &arg.value_type {
+        if let Some(value_name) = &arg.value_name {
             // Strip surrounding angle-brackets if present (e.g. `<PATH>` → `PATH`).
-            let meta = value_type
+            let meta = value_name
                 .trim_matches(|c| c == '<' || c == '>')
                 .to_string();
             clap_arg = clap_arg.value_name(meta);
-            // A value type implies the flag accepts exactly one value by default;
+            // A value name implies the flag accepts exactly one value by default;
             // this may be overridden below by an explicit `num_args`.
             clap_arg = clap_arg.num_args(1);
         }
@@ -486,10 +778,33 @@ pub fn to_clap_command(cmd: &Command) -> clap::Command {
             };
         }
 
-        if let Some(possible_values) = &arg.possible_values {
-            clap_arg = clap_arg.value_parser(clap::builder::PossibleValuesParser::new(
-                possible_values.clone(),
-            ));
+        if let Some(value_enum) = &arg.value_enum {
+            clap_arg =
+                clap_arg.value_parser(clap::builder::PossibleValuesParser::new(value_enum.clone()));
+        }
+
+        if arg.value_hint != ValueHint::Unknown {
+            let clap_hint = match arg.value_hint {
+                ValueHint::Unknown => clap::ValueHint::Unknown,
+                ValueHint::Other => clap::ValueHint::Other,
+                ValueHint::AnyPath => clap::ValueHint::AnyPath,
+                ValueHint::FilePath => clap::ValueHint::FilePath,
+                ValueHint::DirPath => clap::ValueHint::DirPath,
+                ValueHint::ExecutablePath => clap::ValueHint::ExecutablePath,
+                ValueHint::CommandName => clap::ValueHint::CommandName,
+                ValueHint::CommandString => clap::ValueHint::CommandString,
+                ValueHint::CommandWithArguments => clap::ValueHint::CommandWithArguments,
+                ValueHint::Username => clap::ValueHint::Username,
+                ValueHint::Hostname => clap::ValueHint::Hostname,
+                ValueHint::Url => clap::ValueHint::Url,
+                ValueHint::EmailAddress => clap::ValueHint::EmailAddress,
+                ValueHint::EnvVar
+                | ValueHint::NetworkInterface
+                | ValueHint::GitBranch
+                | ValueHint::GitRevision
+                | ValueHint::SystemdUnit => clap::ValueHint::Other,
+            };
+            clap_arg = clap_arg.value_hint(clap_hint);
         }
 
         clap_cmd = clap_cmd.arg(clap_arg);
@@ -530,6 +845,40 @@ where
     Ok(synthesize_completion_with(command_path, &help_runner, strategy)?.command)
 }
 
+fn merge_commands(help_cmd: Command, man_cmd: Command) -> Command {
+    let mut merged = help_cmd.clone();
+
+    if merged.description.is_none() {
+        merged.description = man_cmd.description.clone();
+    }
+
+    for arg in &mut merged.args {
+        if let Some(man_arg) = man_cmd.args.iter().find(|a| {
+            (a.long.is_some() && a.long == arg.long) || (a.short.is_some() && a.short == arg.short)
+        }) {
+            if arg.description.is_none()
+                || arg.description.as_deref().unwrap_or("").trim().is_empty()
+            {
+                arg.description = man_arg.description.clone();
+            }
+            if arg.value_enum.is_none() {
+                arg.value_enum = man_arg.value_enum.clone();
+            }
+            if arg.value_hint == ValueHint::Unknown {
+                arg.value_hint = man_arg.value_hint;
+            }
+        }
+    }
+
+    for sub in &mut merged.subcommands {
+        if let Some(man_sub) = man_cmd.subcommands.iter().find(|s| s.name == sub.name) {
+            *sub = merge_commands(sub.clone(), man_sub.clone());
+        }
+    }
+
+    merged
+}
+
 fn synthesize_completion_with<F>(
     command_path: &str,
     help_runner: &F,
@@ -548,10 +897,16 @@ where
             strategy_used: SynthesisMethod::ManPage,
         }),
         SynthesisStrategy::ManPageThenRunHelp => match load_manpage_command(command_path) {
-            Ok(command) => Ok(SynthesisOutcome {
-                command,
-                strategy_used: SynthesisMethod::ManPage,
-            }),
+            Ok(man_command) => match synthesize_from_help(command_path, help_runner) {
+                Ok(help_command) => Ok(SynthesisOutcome {
+                    command: merge_commands(help_command, man_command),
+                    strategy_used: SynthesisMethod::ManPage,
+                }),
+                Err(_) => Ok(SynthesisOutcome {
+                    command: man_command,
+                    strategy_used: SynthesisMethod::ManPage,
+                }),
+            },
             Err(error) => {
                 log::debug!(
                     "flycomp: falling back to --help for '{}': {}",
@@ -945,6 +1300,148 @@ pub fn generate_completion_output(
 }
 
 #[cfg(test)]
+pub mod test_helpers {
+    use super::*;
+
+    #[derive(Debug, Clone)]
+    pub struct ExpectedArg<'a> {
+        pub arg: Arg,
+        pub description_contains: &'a str,
+    }
+
+    pub fn normalize_desc(desc: Option<&str>) -> String {
+        desc.unwrap_or("")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    pub fn find_arg<'a>(cmd: &'a Command, expected: &ExpectedArg<'_>) -> &'a Arg {
+        cmd.args
+            .iter()
+            .find(|arg| arg.short == expected.arg.short && arg.long == expected.arg.long)
+            .or_else(|| {
+                cmd.args.iter().find(|arg| {
+                    (expected.arg.short.is_some() && arg.short == expected.arg.short)
+                        || (expected.arg.long.is_some() && arg.long == expected.arg.long)
+                })
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "Could not find argument matching expected: short={:?}, long={:?}",
+                    expected.arg.short, expected.arg.long
+                );
+            })
+    }
+
+    pub fn assert_expected_args(cmd: &Command, expected: &[ExpectedArg<'_>]) {
+        assert_eq!(
+            cmd.args.len(),
+            expected.len(),
+            "Number of arguments mismatch: expected {}, got {}. Args in cmd: {:#?}",
+            expected.len(),
+            cmd.args.len(),
+            cmd.args
+        );
+        assert_contains_expected_args(cmd, expected);
+    }
+
+    pub fn assert_contains_expected_args(cmd: &Command, expected: &[ExpectedArg<'_>]) {
+        for expected_arg in expected {
+            let arg = find_arg(cmd, expected_arg);
+            assert_eq!(
+                arg.short, expected_arg.arg.short,
+                "short mismatch for arg {:?}",
+                expected_arg.arg
+            );
+            assert_eq!(
+                arg.long, expected_arg.arg.long,
+                "long mismatch for arg {:?}",
+                expected_arg.arg
+            );
+            assert_eq!(
+                arg.value_name, expected_arg.arg.value_name,
+                "value_name mismatch for arg {:?}",
+                expected_arg.arg
+            );
+            assert_eq!(
+                arg.num_args, expected_arg.arg.num_args,
+                "num_args mismatch for arg {:?}",
+                expected_arg.arg
+            );
+            if expected_arg.arg.value_hint != ValueHint::Unknown {
+                assert_eq!(
+                    arg.value_hint, expected_arg.arg.value_hint,
+                    "value_hint mismatch for arg {:?}",
+                    expected_arg.arg
+                );
+            } else {
+                assert_eq!(
+                    arg.value_hint,
+                    crate::extract_value_hint(
+                        arg.value_name.as_deref(),
+                        arg.description.as_deref()
+                    ),
+                    "ValueHint mismatch for arg {:?} / {:?}",
+                    arg.short,
+                    arg.long
+                );
+            }
+            if let Some(expected_enum) = &expected_arg.arg.value_enum {
+                assert_eq!(
+                    arg.value_enum.as_ref(),
+                    Some(expected_enum),
+                    "value_enum mismatch for arg {:?}",
+                    expected_arg.arg
+                );
+            }
+            let description = normalize_desc(arg.description.as_deref());
+            assert!(
+                description.contains(expected_arg.description_contains),
+                "Expected description of {:?}/{:?} to contain {:?}, but got {:?}",
+                expected_arg.arg.short,
+                expected_arg.arg.long,
+                expected_arg.description_contains,
+                description
+            );
+        }
+    }
+
+    pub fn assert_expected_subcommands(cmd: &Command, expected: &[(&str, &str)]) {
+        assert_eq!(
+            cmd.subcommands.len(),
+            expected.len(),
+            "Number of subcommands mismatch: expected {}, got {}. Subcommands: {:#?}",
+            expected.len(),
+            cmd.subcommands.len(),
+            cmd.subcommands
+        );
+        assert_contains_subcommands(cmd, expected);
+    }
+
+    pub fn assert_contains_subcommands(cmd: &Command, expected: &[(&str, &str)]) {
+        for (name, description_contains) in expected {
+            let subcommand = cmd
+                .subcommands
+                .iter()
+                .find(|subcommand| subcommand.name.as_deref() == Some(*name))
+                .unwrap_or_else(|| {
+                    panic!("Could not find subcommand matching: {:?}", name);
+                });
+            let description = normalize_desc(subcommand.description.as_deref());
+            assert!(!description.is_empty());
+            assert!(
+                description.contains(description_contains),
+                "Expected subcommand {:?} description to contain {:?}, but got {:?}",
+                name,
+                description_contains,
+                description
+            );
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -960,7 +1457,7 @@ mod tests {
                     long: Some("--verbose".to_string()),
                     short: Some("-v".to_string()),
                     description: Some("Enable verbose output.".to_string()),
-                    value_type: None,
+                    value_name: None,
                     num_args: None,
                     ..Default::default()
                 },
@@ -968,7 +1465,7 @@ mod tests {
                     long: Some("--output".to_string()),
                     short: None,
                     description: Some("Output file.".to_string()),
-                    value_type: Some("<PATH>".to_string()),
+                    value_name: Some("<PATH>".to_string()),
                     num_args: None,
                     ..Default::default()
                 },
@@ -1042,7 +1539,7 @@ Options:
                     long: Some("--debug-dump[a/".to_string()),
                     short: Some("-w".to_string()),
                     description: Some("DWARF debug dump selector.".to_string()),
-                    value_type: None,
+                    value_name: None,
                     num_args: None,
                     ..Default::default()
                 },
@@ -1050,7 +1547,7 @@ Options:
                     long: Some("--debug-dump".to_string()),
                     short: Some("-w".to_string()),
                     description: Some("DWARF debug dump mode.".to_string()),
-                    value_type: Some("links".to_string()),
+                    value_name: Some("links".to_string()),
                     num_args: None,
                     ..Default::default()
                 },
@@ -1082,7 +1579,7 @@ Options:
                     long: Some("--debug-dump".to_string()),
                     short: Some("-w".to_string()),
                     description: Some("DWARF debug dump selector.".to_string()),
-                    value_type: Some("a/".to_string()),
+                    value_name: Some("a/".to_string()),
                     num_args: None,
                     ..Default::default()
                 },
@@ -1090,7 +1587,7 @@ Options:
                     long: Some("--debug-dump".to_string()),
                     short: None,
                     description: Some("DWARF debug dump links mode.".to_string()),
-                    value_type: Some("links".to_string()),
+                    value_name: Some("links".to_string()),
                     num_args: None,
                     ..Default::default()
                 },
@@ -1140,7 +1637,7 @@ Options:
             long: Some("--verbose".to_string()),
             short: Some("-v".to_string()),
             description: Some("Be verbose".to_string()),
-            value_type: None,
+            value_name: None,
             num_args: None,
             ..Default::default()
         });
@@ -1321,7 +1818,7 @@ Options:
 
     #[test]
     fn test_parse_possible_values_extraction() {
-        // Test parsing from value_type
+        // Test parsing from value_name
         assert_eq!(
             parse_possible_values(Some("{info,debug,trace}"), None),
             Some(vec![
@@ -1345,6 +1842,25 @@ Options:
                 "debug".to_string(),
                 "trace".to_string()
             ])
+        );
+        assert_eq!(
+            parse_possible_values(Some("0..5"), None),
+            Some(vec![
+                "0".to_string(),
+                "1".to_string(),
+                "2".to_string(),
+                "3".to_string(),
+                "4".to_string(),
+                "5".to_string()
+            ])
+        );
+        assert_eq!(
+            parse_possible_values(Some("<1-3>"), None),
+            Some(vec!["1".to_string(), "2".to_string(), "3".to_string()])
+        );
+        assert_eq!(
+            parse_possible_values(Some("0..100"), None), // too large, should be None
+            None
         );
 
         // Test parsing from description
@@ -1407,6 +1923,34 @@ Options:
                 "debug".to_string(),
                 "trace".to_string()
             ])
+        );
+        assert_eq!(
+            parse_possible_values(None, Some("can be either fast or slow")),
+            Some(vec!["fast".to_string(), "slow".to_string()])
+        );
+        assert_eq!(
+            parse_possible_values(None, Some("selected from: apple, banana")),
+            Some(vec!["apple".to_string(), "banana".to_string()])
+        );
+
+        // Test bulleted list parsing
+        assert_eq!(
+            parse_possible_values(
+                None,
+                Some("Supported formats:\n  - json: JSON format\n  - yaml: YAML format")
+            ),
+            Some(vec!["json".to_string(), "yaml".to_string()])
+        );
+        assert_eq!(
+            parse_possible_values(
+                None,
+                Some("Supported formats: - json: JSON format - yaml: YAML format")
+            ),
+            Some(vec!["json".to_string(), "yaml".to_string()])
+        );
+        assert_eq!(
+            parse_possible_values(None, Some("Modes:\n  * fast\n  * slow")),
+            Some(vec!["fast".to_string(), "slow".to_string()])
         );
 
         // Test none when no matches or junk
@@ -1491,13 +2035,19 @@ Options:
 
         // Test: quoted values in list and default
         assert_eq!(
-            parse_possible_values(None, Some("modes: 'active', 'inactive'. default is 'active'")),
+            parse_possible_values(
+                None,
+                Some("modes: 'active', 'inactive'. default is 'active'")
+            ),
             Some(vec!["active".to_string(), "inactive".to_string()])
         );
 
         // Test: values with dashes and underscores
         assert_eq!(
-            parse_possible_values(None, Some("use: my-value, other_value. default: other_value")),
+            parse_possible_values(
+                None,
+                Some("use: my-value, other_value. default: other_value")
+            ),
             Some(vec!["my-value".to_string(), "other_value".to_string()])
         );
 
@@ -1519,14 +2069,149 @@ Options:
 
         // Test: default is x, where x is in the list with other text
         assert_eq!(
-            parse_possible_values(None, Some("Available options are: first, second, third. The default is second.")),
-            Some(vec!["first".to_string(), "second".to_string(), "third".to_string()])
+            parse_possible_values(
+                None,
+                Some("Available options are: first, second, third. The default is second.")
+            ),
+            Some(vec![
+                "first".to_string(),
+                "second".to_string(),
+                "third".to_string()
+            ])
         );
 
         // Test: multiple potential lists, should pick the one containing default
         assert_eq!(
-            parse_possible_values(None, Some("birds: eagle, hawk. fish: shark, trout. default: shark")),
+            parse_possible_values(
+                None,
+                Some("birds: eagle, hawk. fish: shark, trout. default: shark")
+            ),
             Some(vec!["shark".to_string(), "trout".to_string()])
         );
+    }
+
+    #[test]
+    fn test_extract_value_hint() {
+        // Test URL
+        assert_eq!(extract_value_hint(Some("url"), None), ValueHint::Url);
+        assert_eq!(
+            extract_value_hint(None, Some("the API endpoint")),
+            ValueHint::Url
+        );
+
+        // Test Hostname
+        assert_eq!(extract_value_hint(Some("host"), None), ValueHint::Hostname);
+        assert_eq!(
+            extract_value_hint(None, Some("bind to the server ip address")),
+            ValueHint::Hostname
+        );
+        assert_eq!(
+            extract_value_hint(None, Some("target host remote name")),
+            ValueHint::Hostname
+        );
+
+        // Test ExecutablePath
+        assert_eq!(
+            extract_value_hint(Some("executable"), None),
+            ValueHint::ExecutablePath
+        );
+        assert_eq!(
+            extract_value_hint(None, Some("path to executable command")),
+            ValueHint::ExecutablePath
+        );
+        assert_eq!(
+            extract_value_hint(None, Some("path to binary")),
+            ValueHint::ExecutablePath
+        );
+
+        // Test DirPath vs FilePath in output/input specific heuristic
+        assert_eq!(
+            extract_value_hint(Some("output"), Some("write output to directory")),
+            ValueHint::DirPath
+        );
+        assert_eq!(
+            extract_value_hint(Some("output"), Some("write output to file")),
+            ValueHint::FilePath
+        );
+
+        // Test EnvVar
+        assert_eq!(extract_value_hint(Some("env-var"), None), ValueHint::EnvVar);
+        assert_eq!(
+            extract_value_hint(None, Some("read from environment variable")),
+            ValueHint::EnvVar
+        );
+
+        // Test NetworkInterface
+        assert_eq!(
+            extract_value_hint(Some("iface"), None),
+            ValueHint::NetworkInterface
+        );
+        assert_eq!(
+            extract_value_hint(None, Some("bind network interface")),
+            ValueHint::NetworkInterface
+        );
+
+        // Test GitBranch / GitRevision
+        assert_eq!(
+            extract_value_hint(Some("branch"), None),
+            ValueHint::GitBranch
+        );
+        assert_eq!(
+            extract_value_hint(None, Some("git commit hash")),
+            ValueHint::GitRevision
+        );
+
+        // Test SystemdUnit
+        assert_eq!(
+            extract_value_hint(Some("service"), None),
+            ValueHint::SystemdUnit
+        );
+        assert_eq!(
+            extract_value_hint(None, Some("systemd unit service")),
+            ValueHint::SystemdUnit
+        );
+    }
+
+    #[test]
+    fn test_merge_commands() {
+        let help_cmd = Command {
+            name: Some("test".to_string()),
+            description: None,
+            args: vec![Arg {
+                long: Some("--config".to_string()),
+                description: Some("Config path".to_string()),
+                value_name: Some("PATH".to_string()),
+                value_hint: ValueHint::Unknown,
+                ..Default::default()
+            }],
+            ..Command::default()
+        };
+
+        let man_cmd = Command {
+            name: Some("test".to_string()),
+            description: Some("A parsed test tool description".to_string()),
+            args: vec![Arg {
+                long: Some("--config".to_string()),
+                description: None,
+                value_name: Some("PATH".to_string()),
+                value_hint: ValueHint::FilePath,
+                value_enum: Some(vec!["config.toml".to_string()]),
+                ..Default::default()
+            }],
+            ..Command::default()
+        };
+
+        let merged = merge_commands(help_cmd, man_cmd);
+
+        assert_eq!(
+            merged.description,
+            Some("A parsed test tool description".to_string())
+        );
+        assert_eq!(merged.args[0].value_hint, ValueHint::FilePath);
+        assert_eq!(
+            merged.args[0].value_enum,
+            Some(vec!["config.toml".to_string()])
+        );
+        assert_eq!(merged.args[0].description, Some("Config path".to_string()));
     }
 }
