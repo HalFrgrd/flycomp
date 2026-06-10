@@ -1308,19 +1308,19 @@ None documented.
     use crate::test_helpers::*;
 
     fn parse_test_manpage(name: &str) -> Command {
-        let content = fs::read_to_string(format!("../tests/man_pages/{name}")).unwrap();
+        let content = fs::read_to_string(format!("tests/man_pages/{name}")).unwrap();
         let cmd_name = name.split('.').next().unwrap();
         parse_manpage(cmd_name, &content).unwrap()
     }
 
     fn parse_test_manpage_recursive(name: &str, max_depth: usize) -> Command {
-        let content = fs::read_to_string(format!("../tests/man_pages/{name}")).unwrap();
+        let content = fs::read_to_string(format!("tests/man_pages/{name}")).unwrap();
         let cmd_name = name.split('.').next().unwrap();
         let loader = |sub_man_name: &str| -> Option<String> {
-            if let Ok(c) = fs::read_to_string(format!("../tests/man_pages/{sub_man_name}.1")) {
+            if let Ok(c) = fs::read_to_string(format!("tests/man_pages/{sub_man_name}.1")) {
                 return Some(c);
             }
-            if let Ok(c) = fs::read_to_string(format!("../tests/man_pages/{sub_man_name}.8")) {
+            if let Ok(c) = fs::read_to_string(format!("tests/man_pages/{sub_man_name}.8")) {
                 return Some(c);
             }
             None

@@ -18,10 +18,10 @@ fn main() {
     println!("cargo:rustc-env=BUILD_TIME={build_time}");
 
     // Re-run when HEAD changes
-    println!("cargo:rerun-if-changed=../.git/HEAD");
-    if let Ok(head) = std::fs::read_to_string("../.git/HEAD")
+    println!("cargo:rerun-if-changed=.git/HEAD");
+    if let Ok(head) = std::fs::read_to_string(".git/HEAD")
         && let Some(refpath) = head.strip_prefix("ref: ")
     {
-        println!("cargo:rerun-if-changed=../.git/{}", refpath.trim());
+        println!("cargo:rerun-if-changed=.git/{}", refpath.trim());
     }
 }

@@ -1,10 +1,10 @@
 #!/bin/sh
 # Flycomp installer
-# Usage: curl -sSfL https://raw.githubusercontent.com/HalFrgrd/flyline/master/flycomp/install.sh | sh
+# Usage: curl -sSfL https://raw.githubusercontent.com/HalFrgrd/flycomp/master/install.sh | sh
 
 set -eu
 
-REPO="HalFrgrd/flyline"
+REPO="HalFrgrd/flycomp"
 INSTALL_DIR="${HOME}/.local/bin"
 
 # ---------------------------------------------------------------------------
