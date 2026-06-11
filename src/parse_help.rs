@@ -407,10 +407,7 @@ pub(crate) fn parse_flag_tokens(token: &str) -> (Option<String>, Option<String>,
                 if let Some(end_bracket) = piece_str.rfind(']') {
                     if end_bracket > start_bracket {
                         let val = &piece_str[start_bracket + 2..end_bracket];
-                        if value_name.is_none() {
-                            value_name =
-                                Some(val.trim_matches(|c| c == '<' || c == '>').to_string());
-                        }
+                        value_name = Some(val.trim_matches(|c| c == '<' || c == '>').to_string());
                         piece_str.drain(start_bracket..=end_bracket);
                     }
                 }
@@ -426,9 +423,7 @@ pub(crate) fn parse_flag_tokens(token: &str) -> (Option<String>, Option<String>,
 
             if let Some((flag, val)) = piece_str.split_once('=') {
                 long = Some(flag.trim_end_matches(',').trim_end_matches('.').to_string());
-                if value_name.is_none() {
-                    value_name = Some(val.trim_matches(|c| c == '<' || c == '>').to_string());
-                }
+                value_name = Some(val.trim_matches(|c| c == '<' || c == '>').to_string());
             } else {
                 let mut l = piece_str.trim_end_matches(',').to_string();
                 while l.ends_with('.') {
@@ -2261,6 +2256,26 @@ mod tests {
                     },
                     description_contains: "Display the contents of DWARF debug sections",
                 },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-U".to_string()),
+                        long: Some("--unicode".to_string()),
+                        value_name: Some(
+                            "[default|locale|escape|hex|highlight|invalid]".to_string(),
+                        ),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "default".to_string(),
+                            "locale".to_string(),
+                            "escape".to_string(),
+                            "hex".to_string(),
+                            "highlight".to_string(),
+                            "invalid".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "Display unicode characters",
+                },
             ],
         );
     }
@@ -2276,7 +2291,10 @@ mod tests {
             parse_flag_tokens("-U[dlexhi] --unicode=[default|locale|escape|hex|highlight|invalid]");
         assert_eq!(short, Some("-U".to_string()));
         assert_eq!(long.as_deref(), Some("--unicode"));
-        assert_eq!(value_name.as_deref(), Some("dlexhi"));
+        assert_eq!(
+            value_name.as_deref(),
+            Some("[default|locale|escape|hex|highlight|invalid]")
+        );
     }
     #[test]
     fn test_zstd_help() {

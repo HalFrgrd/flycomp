@@ -602,9 +602,11 @@ fn parse_bulleted_list_values(desc: &str) -> Option<Vec<String>> {
     let mut values = Vec::new();
 
     // Pattern 1: Bullet + value + separator (like ':' or ' - ' or 2+ spaces)
-    let re_bullet_sep =
+    static RE_BULLET_SEP: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re_bullet_sep = RE_BULLET_SEP.get_or_init(|| {
         regex::Regex::new(r"(?:^|\s)[-*+o•]\s+([a-zA-Z0-9_-]+)(?:\s*:\s+|\s+-\s+|[ \t]{2,})")
-            .unwrap();
+            .unwrap()
+    });
     for caps in re_bullet_sep.captures_iter(desc) {
         let val = caps.get(1).unwrap().as_str().to_string();
         if !values.contains(&val) {
@@ -617,7 +619,9 @@ fn parse_bulleted_list_values(desc: &str) -> Option<Vec<String>> {
     }
 
     // Pattern 2: Pure bullet + word lines anywhere in the description
-    let re_bullet_pure = regex::Regex::new(r"^\s*[-*+o•]\s+([a-zA-Z0-9_-]+)\s*$").unwrap();
+    static RE_BULLET_PURE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re_bullet_pure = RE_BULLET_PURE
+        .get_or_init(|| regex::Regex::new(r"^\s*[-*+o•]\s+([a-zA-Z0-9_-]+)\s*$").unwrap());
     let mut pure_vals = Vec::new();
     for line in desc.lines() {
         if let Some(caps) = re_bullet_pure.captures(line) {
@@ -639,6 +643,15 @@ pub fn parse_possible_values(
     value_name: Option<&str>,
     description: Option<&str>,
 ) -> Option<Vec<String>> {
+    static RANGE_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static DWARF_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static RE_PREFIX: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static BOUNDARY_RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static TOKEN_SEP: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static RE_DEFAULT: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static RE_DEFAULT_SEP: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static RE_DEFAULT_LABEL: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+
     // 0. Check if value_name is a literal lowercase value (like links, follow-links)
     if let Some(vt) = value_name {
         if !vt.starts_with('<') && !vt.starts_with('[') && !vt.ends_with('>') && !vt.ends_with(']')
@@ -655,7 +668,8 @@ pub fn parse_possible_values(
         let clean_type = vt.trim_matches(|c| c == '[' || c == ']' || c == '<' || c == '>');
 
         // Try range syntax like 0..5 or 1-5
-        let range_re = regex::Regex::new(r"^(\d+)(?:\.\.|-)(\d+)$").unwrap();
+        let range_re =
+            RANGE_RE.get_or_init(|| regex::Regex::new(r"^(\d+)(?:\.\.|-)(\d+)$").unwrap());
         if let Some(caps) = range_re.captures(clean_type) {
             let start: usize = caps.get(1).unwrap().as_str().parse().unwrap_or(0);
             let end: usize = caps.get(2).unwrap().as_str().parse().unwrap_or(0);
@@ -695,7 +709,9 @@ pub fn parse_possible_values(
     // 2. Try to parse from description
     if let Some(desc) = description {
         // Try to parse DWARF selector format like a/=abbrev, A/=addr, etc. from description
-        let dwarf_re = regex::Regex::new(r"([a-zA-Z0-9_-]+)\s*/=\s*([a-zA-Z0-9_-]+)").unwrap();
+        let dwarf_re = DWARF_RE.get_or_init(|| {
+            regex::Regex::new(r"([a-zA-Z0-9_-]+)\s*/=\s*([a-zA-Z0-9_-]+)").unwrap()
+        });
         let mut dwarf_vals = Vec::new();
         for caps in dwarf_re.captures_iter(desc) {
             let val = caps.get(2).unwrap().as_str().to_string();
@@ -711,9 +727,11 @@ pub fn parse_possible_values(
             return Some(list_vals);
         }
         // regex to find the prefix
-        let re_prefix = regex::Regex::new(
-            r"(?i)\b(?:possible\s+values|choices|allowed\s+values|valid\s+values|one\s+of|accepts|can\s+be|selected\s+from)\s*(?:=|:|\bare\b)?\s*|\bmust\s+be\s+(?:either\s+|one\s+of\s+)?(?:=|:)?\s*"
-        ).unwrap();
+        let re_prefix = RE_PREFIX.get_or_init(|| {
+            regex::Regex::new(
+                r"(?i)\b(?:possible\s+values|choices|allowed\s+values|valid\s+values|one\s+of|accepts|can\s+be|selected\s+from)\s*(?:=|:|\bare\b)?\s*|\bmust\s+be\s+(?:either\s+|one\s+of\s+)?(?:=|:)?\s*"
+            ).unwrap()
+        });
 
         if let Some(mat) = re_prefix.find(desc) {
             let mut remaining = &desc[mat.end()..];
@@ -730,7 +748,8 @@ pub fn parse_possible_values(
             } else {
                 // Otherwise, take up to the next clause boundary: a period (if followed by space/end), a semicolon,
                 // or a bracket, or maybe parenthesis.
-                let boundary_re = regex::Regex::new(r"(?:\.(?:\s|$)|\;|\]|\))").unwrap();
+                let boundary_re = BOUNDARY_RE
+                    .get_or_init(|| regex::Regex::new(r"(?:\.(?:\s|$)|\;|\]|\))").unwrap());
                 if let Some(mat_boundary) = boundary_re.find(remaining) {
                     remaining = &remaining[..mat_boundary.start()];
                 }
@@ -745,8 +764,9 @@ pub fn parse_possible_values(
             }
 
             // Split the remaining string into tokens.
-            let token_sep =
-                regex::Regex::new(r"\s*(?:,\s*(?:or|and)?|\b(?:or|and)\b|\||/)\s*").unwrap();
+            let token_sep = TOKEN_SEP.get_or_init(|| {
+                regex::Regex::new(r"\s*(?:,\s*(?:or|and)?|\b(?:or|and)\b|\||/)\s*").unwrap()
+            });
             let raw_tokens: Vec<&str> = token_sep.split(remaining_str).collect();
 
             let mut values = Vec::new();
@@ -772,10 +792,12 @@ pub fn parse_possible_values(
 
     // 3. Heuristic: if we find a list and a mention of "default: x" where x is in that list.
     if let Some(desc) = description {
-        let re_default = regex::Regex::new(
-            r#"(?i)[(\[]?\bdefault\s*(?::|is)\s*['"`]?([a-zA-Z0-9\-_]+)['"`]?[)\]]?"#,
-        )
-        .unwrap();
+        let re_default = RE_DEFAULT.get_or_init(|| {
+            regex::Regex::new(
+                r#"(?i)[(\[]?\bdefault\s*(?::|is)\s*['"`]?([a-zA-Z0-9\-_]+)['"`]?[)\]]?"#,
+            )
+            .unwrap()
+        });
 
         for caps in re_default.captures_iter(desc) {
             let default_val = caps.get(1).unwrap().as_str();
@@ -787,7 +809,8 @@ pub fn parse_possible_values(
             // Also split by "default" itself if it's not already a separator
             let mut all_clauses = Vec::new();
             for s in segments {
-                let re_default_sep = regex::Regex::new(r"(?i)\bdefault\s*(?::|is)\b").unwrap();
+                let re_default_sep = RE_DEFAULT_SEP
+                    .get_or_init(|| regex::Regex::new(r"(?i)\bdefault\s*(?::|is)\b").unwrap());
                 for part in re_default_sep.split(s) {
                     all_clauses.push(part);
                 }
@@ -808,15 +831,17 @@ pub fn parse_possible_values(
                 }
 
                 // Remove "default:" label to avoid interfering with list parsing.
-                let re_default_label = regex::Regex::new(r"(?i)\bdefault\s*(?::|is)\s*").unwrap();
+                let re_default_label = RE_DEFAULT_LABEL
+                    .get_or_init(|| regex::Regex::new(r"(?i)\bdefault\s*(?::|is)\s*").unwrap());
                 let clause_cleaned = re_default_label.replace_all(clause, " ");
                 clause = clause_cleaned.trim();
                 if clause.is_empty() {
                     continue;
                 }
 
-                let token_sep =
-                    regex::Regex::new(r"\s*(?:,\s*(?:or|and)?|\b(?:or|and)\b|\||/)\s*").unwrap();
+                let token_sep = TOKEN_SEP.get_or_init(|| {
+                    regex::Regex::new(r"\s*(?:,\s*(?:or|and)?|\b(?:or|and)\b|\||/)\s*").unwrap()
+                });
                 let raw_tokens: Vec<&str> = token_sep.split(clause).collect();
 
                 if raw_tokens.len() >= 2 {

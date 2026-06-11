@@ -10,8 +10,8 @@ struct ParsedOption {
 }
 
 fn remove_device_controls(data: &str) -> String {
-    Regex::new(r"\\[XZ]'[^']*'")
-        .unwrap()
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\\[XZ]'[^']*'").unwrap())
         .replace_all(data, "")
         .into_owned()
 }
@@ -42,8 +42,8 @@ fn replace_special_escapes(data: &str) -> String {
 }
 
 fn strip_font_escapes(data: &str) -> String {
-    Regex::new(r"\\f(\([^)]{2}|\[[^\]]*\]|.)")
-        .unwrap()
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\\f(\([^)]{2}|\[[^\]]*\]|.)").unwrap())
         .replace_all(data, "")
         .into_owned()
 }
@@ -64,10 +64,13 @@ fn trim_known_inline_macros(line: &str) -> String {
     if let Some(stripped) = trimmed.strip_prefix('.') {
         line = stripped.to_string();
 
-        let macro_re = Regex::new(
-            r"^(?:[A-Z][A-Za-z]?|rb|Nm|Fl|Ar|Pa|Ev|Dv|Cm|Ic|No|Sq|Dq|Pq|Em|Sy|Li|Tn|Ns|Op|Oo|Oc|Xo|Xc|Xr)\s+",
-        )
-        .unwrap();
+        static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+        let macro_re = RE.get_or_init(|| {
+            Regex::new(
+                r"^(?:[A-Z][A-Za-z]?|rb|Nm|Fl|Ar|Pa|Ev|Dv|Cm|Ic|No|Sq|Dq|Pq|Em|Sy|Li|Tn|Ns|Op|Oo|Oc|Xo|Xc|Xr)\s+",
+            )
+            .unwrap()
+        });
         while macro_re.is_match(&line) {
             line = macro_re.replace(&line, "").into_owned();
         }
@@ -83,8 +86,8 @@ fn trim_known_inline_macros(line: &str) -> String {
 }
 
 fn normalize_whitespace(data: &str) -> String {
-    Regex::new(r"\s+")
-        .unwrap()
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\s+").unwrap())
         .replace_all(data.trim(), " ")
         .into_owned()
 }
@@ -129,12 +132,13 @@ fn strip_groff_wrappers(data: &str) -> String {
     let data = strip_font_escapes(&data);
     let data = replace_special_escapes(&data);
     let data = data.replace("\x0C", " ");
-    let data = Regex::new(r"(?m)^\.PD(?: \d+)?$")
-        .unwrap()
+    static RE1: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let data = RE1
+        .get_or_init(|| Regex::new(r"(?m)^\.PD(?: \d+)?$").unwrap())
         .replace_all(&data, "")
         .into_owned();
-    Regex::new(r"\.([A-Z][A-Za-z]?|rb)\b")
-        .unwrap()
+    static RE2: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    RE2.get_or_init(|| Regex::new(r"\.([A-Z][A-Za-z]?|rb)\b").unwrap())
         .replace_all(&data, "")
         .into_owned()
 }
@@ -212,8 +216,8 @@ fn clean_option_source(data: &str, cmd_name: &str) -> String {
 }
 
 fn split_aliases(option_text: &str) -> Vec<String> {
-    Regex::new(r"\s*(?:,|\||/|\bor\b)\s*")
-        .unwrap()
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\s*(?:,|\||/|\bor\b)\s*").unwrap())
         .split(option_text)
         .map(str::trim)
         .filter(|token| !token.is_empty())
@@ -240,8 +244,9 @@ fn find_value_type(remainder: &str) -> (Option<String>, Option<String>) {
         return (None, None);
     }
 
-    if let Some(caps) = Regex::new(r"^\[=?(?P<value>[^\]]+)\]")
-        .unwrap()
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    if let Some(caps) = RE
+        .get_or_init(|| Regex::new(r"^\[=?(?P<value>[^\]]+)\]").unwrap())
         .captures(remainder)
     {
         let value = normalize_value_token(caps.name("value").unwrap().as_str());
@@ -273,8 +278,12 @@ fn find_value_type(remainder: &str) -> (Option<String>, Option<String>) {
 fn parse_alias(alias: &str) -> Option<ParsedOption> {
     let alias = alias.trim();
     // Support options that contain brackets for negation, e.g. --[no-]color or --[no]color.
-    let caps = Regex::new(r"^(?P<option>--?(?:\[no\-?\])?[A-Za-z0-9#][A-Za-z0-9_-]*)(?P<rest>.*)$")
-        .unwrap()
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let caps = RE
+        .get_or_init(|| {
+            Regex::new(r"^(?P<option>--?(?:\[no\-?\])?[A-Za-z0-9#][A-Za-z0-9_-]*)(?P<rest>.*)$")
+                .unwrap()
+        })
         .captures(alias)?;
     let option = caps.name("option").unwrap().as_str();
     if option == "-" || option == "--" {
@@ -624,18 +633,25 @@ fn split_option_and_desc(line: &str) -> (String, Option<String>) {
 
 fn parse_tagged_blocks(cmd: &mut Command, section: &str) -> bool {
     let mut found = false;
-    let no_ix = Regex::new(r"(?m)^\.IX.*\n?")
-        .unwrap()
+    static NO_IX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let no_ix = NO_IX
+        .get_or_init(|| Regex::new(r"(?m)^\.IX.*\n?").unwrap())
         .replace_all(section, "")
         .into_owned();
 
-    let trailing_digits = Regex::new(r"\d+$").unwrap();
-    let structural_macro =
-        Regex::new(r"^\.(?:TP|TQ|IP|SH|Sh|SS|Ss|UNINDENT|UN|PP|Pp|RS|RE|sp)\b").unwrap();
-    let conditional_structural_macro =
+    static TRAILING_DIGITS: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let trailing_digits = TRAILING_DIGITS.get_or_init(|| Regex::new(r"\d+$").unwrap());
+    static STRUCTURAL_MACRO: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let structural_macro = STRUCTURAL_MACRO.get_or_init(|| {
+        Regex::new(r"^\.(?:TP|TQ|IP|SH|Sh|SS|Ss|UNINDENT|UN|PP|Pp|RS|RE|sp)\b").unwrap()
+    });
+    static CONDITIONAL_STRUCTURAL_MACRO: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let conditional_structural_macro = CONDITIONAL_STRUCTURAL_MACRO.get_or_init(|| {
         Regex::new(r"^\.(?:ie|el)\b.*\.(?:TP|TQ|IP|HP|SH|Sh|SS|Ss|UNINDENT|UN|PP|Pp|RS|RE|sp)\b")
-            .unwrap();
-    let pd_macro = Regex::new(r"^\.PD(?:\s+\d+)?$").unwrap();
+            .unwrap()
+    });
+    static PD_MACRO: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let pd_macro = PD_MACRO.get_or_init(|| Regex::new(r"^\.PD(?:\s+\d+)?$").unwrap());
     let mut lines = no_ix.lines().peekable();
 
     while let Some(line) = lines.next() {
@@ -778,7 +794,8 @@ fn parse_tagged_blocks(cmd: &mut Command, section: &str) -> bool {
 
 fn parse_scdoc_blocks(cmd: &mut Command, section: &str) -> bool {
     let mut found = false;
-    let re = Regex::new(r"(?ms)(.*?)\.RE").unwrap();
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"(?ms)(.*?)\.RE").unwrap());
     let mut cursor = section;
 
     while let Some(caps) = re.captures(cursor) {
@@ -813,8 +830,9 @@ fn parse_darwin_option_line(line: &str) -> Option<String> {
         .replace(" Op ", "[")
         .replace(" Fl Fl ", " --")
         .replace(" Fl ", " -");
-    text = Regex::new(r"(?P<prefix>^|[\s=\[:])Ar\s+")
-        .unwrap()
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    text = RE
+        .get_or_init(|| Regex::new(r"(?P<prefix>^|[\s=\[:])Ar\s+").unwrap())
         .replace_all(&text, "${prefix}")
         .into_owned();
     let declaration = normalize_whitespace(&strip_groff_wrappers(&text));
@@ -1008,8 +1026,11 @@ fn parse_darwin_sections(cmd: &mut Command, content: &str) -> bool {
 
 fn parse_subcommand_name(cmd_name: &str, token: &str) -> Option<String> {
     let normalized = normalize_whitespace(&strip_groff_wrappers(token));
-    let caps = Regex::new(r"^(?P<name>[A-Za-z0-9][A-Za-z0-9+._-]*)\((?P<section>\d+)\)$")
-        .unwrap()
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let caps = RE
+        .get_or_init(|| {
+            Regex::new(r"^(?P<name>[A-Za-z0-9][A-Za-z0-9+._-]*)\((?P<section>\d+)\)$").unwrap()
+        })
         .captures(&normalized)?;
     let name = caps.name("name").unwrap().as_str();
     let prefix = format!("{cmd_name}-");
@@ -1061,7 +1082,8 @@ fn add_subcommand(cmd: &mut Command, name: &str, description: &str) -> bool {
 }
 
 fn extract_subcommand_candidates(section: &str, cmd_name: &str) -> Vec<(String, String)> {
-    let re = Regex::new(r"(?ms)\.PP\s*(.*?)\.RS 4\s*(.*?)\.RE").unwrap();
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"(?ms)\.PP\s*(.*?)\.RS 4\s*(.*?)\.RE").unwrap());
     let mut candidates = Vec::new();
 
     for caps in re.captures_iter(section) {
