@@ -1525,6 +1525,8 @@ fn run_help_attempt(
             "/dev",
             "--proc",
             "/proc",
+            "--tmpfs",
+            "/tmp",
             "--unshare-all",
             "--",
             &actual_command,
@@ -1541,7 +1543,7 @@ fn run_help_attempt(
     };
     if use_sandbox {
         log::info!(
-            "flycomp: running command (sandboxed): bwrap --ro-bind / / --dev /dev --proc /proc --unshare-all -- {} {}{}",
+            "flycomp: running command (sandboxed): bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --unshare-all -- {} {}{}",
             actual_command,
             cmd_args_str,
             help_arg
