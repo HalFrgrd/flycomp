@@ -2058,8 +2058,7 @@ Options:
     fn test_read_manpage_source_compressed() {
         use std::process::Command;
         // Create a temporary directory in target
-        let temp_dir = std::env::current_dir()
-            .unwrap()
+        let temp_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("target")
             .join("test_temp");
         std::fs::create_dir_all(&temp_dir).unwrap();
@@ -2121,8 +2120,7 @@ Options:
     #[test]
     fn test_run_help_in_cwd() {
         use std::io::Write;
-        let temp_dir = std::env::current_dir()
-            .unwrap()
+        let temp_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("target")
             .join("test_run_help_cwd");
         std::fs::create_dir_all(&temp_dir).unwrap();
@@ -2157,8 +2155,7 @@ Options:
     #[test]
     fn test_run_help_non_zero_exit() {
         use std::io::Write;
-        let temp_dir = std::env::current_dir()
-            .unwrap()
+        let temp_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("target")
             .join("test_run_help_exit_fail");
         std::fs::create_dir_all(&temp_dir).unwrap();

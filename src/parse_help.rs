@@ -2090,8 +2090,11 @@ mod tests {
             let mut path_parts = vec!["git"];
             path_parts.extend(args);
             let path_str = path_parts.join("/");
-            let file_path = format!("tests/help_texts/{}/help.txt", path_str);
-            if std::path::Path::new(&file_path).exists() {
+            let file_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests")
+                .join("help_texts")
+                .join(format!("{}/help.txt", path_str));
+            if file_path.exists() {
                 Ok(std::fs::read_to_string(file_path)?)
             } else {
                 Ok("".to_string())
@@ -2456,14 +2459,21 @@ Commands:
     }
 
     fn parse_test_help(name: &str) -> Command {
-        let content =
-            std::fs::read_to_string(format!("tests/help_texts/{}/help.txt", name)).unwrap();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("help_texts")
+            .join(format!("{}/help.txt", name));
+        let content = std::fs::read_to_string(path).unwrap();
         parse_help(&content)
     }
 
     fn read_fixture(path: &[&str]) -> String {
         let path_str = path.join("/");
-        std::fs::read_to_string(format!("tests/help_texts/{}/help.txt", path_str)).unwrap()
+        let filepath = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("help_texts")
+            .join(format!("{}/help.txt", path_str));
+        std::fs::read_to_string(filepath).unwrap()
     }
 
     #[test]
@@ -3117,7 +3127,11 @@ Commands:
 
     #[test]
     fn test_git_real_top_help() {
-        let content = std::fs::read_to_string("tests/help_texts/git_real/top.txt").unwrap();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("help_texts")
+            .join("git_real/top.txt");
+        let content = std::fs::read_to_string(path).unwrap();
         let cmd = parse_help(&content);
         assert_eq!(cmd.name.as_deref(), Some("git"));
 
@@ -3136,7 +3150,11 @@ Commands:
 
     #[test]
     fn test_git_real_commit_help() {
-        let content = std::fs::read_to_string("tests/help_texts/git_real/commit.txt").unwrap();
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("help_texts")
+            .join("git_real/commit.txt");
+        let content = std::fs::read_to_string(path).unwrap();
         let cmd = parse_help(&content);
 
         assert_contains_expected_args(
