@@ -1244,8 +1244,53 @@ fn load_manpage_command(command_path: &str, recurse_limit: usize) -> anyhow::Res
         .ok_or_else(|| anyhow::anyhow!("failed to parse man page for '{}'", cmd_name))
 }
 
+fn get_man_paths() -> &'static Vec<std::path::PathBuf> {
+    static MAN_PATHS: std::sync::OnceLock<Vec<std::path::PathBuf>> = std::sync::OnceLock::new();
+    MAN_PATHS.get_or_init(|| {
+        let mut paths = Vec::new();
+        if let Ok(output) = std::process::Command::new("manpath").output() {
+            if output.status.success() {
+                let s = String::from_utf8_lossy(&output.stdout);
+                for p in s.split(':') {
+                    let trimmed = p.trim();
+                    if !trimmed.is_empty() {
+                        paths.push(std::path::PathBuf::from(trimmed));
+                    }
+                }
+            }
+        }
+        if paths.is_empty() {
+            // Fallbacks
+            paths.push(std::path::PathBuf::from("/usr/share/man"));
+            paths.push(std::path::PathBuf::from("/usr/local/share/man"));
+        }
+        paths
+    })
+}
+
 fn locate_manpage(command_name: &str) -> anyhow::Result<String> {
     log::info!("flycomp: locating man page for '{}'", command_name);
+    let man_paths = get_man_paths();
+    let sections = ["1", "8", "6"];
+    let extensions = [".gz", ".zst", ".xz", "", ".z", ".bz2"];
+
+    for base_path in man_paths {
+        for section in &sections {
+            let sub_dir = base_path.join(format!("man{}", section));
+            if sub_dir.exists() {
+                for ext in &extensions {
+                    let file_path = sub_dir.join(format!("{}.{}{}", command_name, section, ext));
+                    if file_path.exists() {
+                        let path_str = file_path.to_string_lossy().into_owned();
+                        log::info!("flycomp: found man page at '{}' (fast search)", path_str);
+                        return Ok(path_str);
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback to calling `man -w` if fast search failed
     let output = std::process::Command::new("man")
         .args(["-w", command_name])
         .output()
@@ -1262,7 +1307,7 @@ fn locate_manpage(command_name: &str) -> anyhow::Result<String> {
         .find(|line| !line.is_empty())
         .ok_or_else(|| anyhow::anyhow!("man page path missing for '{}'", command_name))?;
 
-    log::info!("flycomp: found man page at '{}'", path);
+    log::info!("flycomp: found man page at '{}' (fallback)", path);
     Ok(path.to_string())
 }
 
