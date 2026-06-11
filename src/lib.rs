@@ -1472,9 +1472,10 @@ fn find_subcommand_mut<'a>(root: &'a mut Command, path: &[String]) -> Option<&'a
 ///
 /// Many tools print their help to *stderr* rather than *stdout*; this function
 /// returns whichever stream is non-empty (preferring stdout).
-pub fn run_help(
+fn run_help_attempt(
     command_path: &str,
     extra_args: &[&str],
+    help_arg: &str,
     sandbox: bool,
     timeout_ms: u64,
 ) -> anyhow::Result<String> {
@@ -1540,21 +1541,23 @@ pub fn run_help(
     };
     if use_sandbox {
         log::info!(
-            "flycomp: running command (sandboxed): bwrap --ro-bind / / --dev /dev --proc /proc --unshare-all -- {} {}--help",
+            "flycomp: running command (sandboxed): bwrap --ro-bind / / --dev /dev --proc /proc --unshare-all -- {} {}{}",
             actual_command,
-            cmd_args_str
+            cmd_args_str,
+            help_arg
         );
     } else {
         log::info!(
-            "flycomp: running command: {} {}--help",
+            "flycomp: running command: {} {}{}",
             actual_command,
-            cmd_args_str
+            cmd_args_str,
+            help_arg
         );
     }
 
     let mut child = child
         .args(extra_args)
-        .arg("--help")
+        .arg(help_arg)
         .env("PAGER", "cat")
         .env("MANPAGER", "cat")
         .env("SYSTEMD_PAGER", "cat")
@@ -1658,6 +1661,37 @@ pub fn run_help(
     } else {
         stdout
     })
+}
+
+pub fn run_help(
+    command_path: &str,
+    extra_args: &[&str],
+    sandbox: bool,
+    timeout_ms: u64,
+) -> anyhow::Result<String> {
+    match run_help_attempt(command_path, extra_args, "--help", sandbox, timeout_ms) {
+        Ok(output) => Ok(output),
+        Err(e) => {
+            let err_msg = e.to_string();
+            if err_msg.contains("not found in PATH or CWD") {
+                return Err(e);
+            }
+            log::info!(
+                "flycomp: --help failed for '{}' ({}). Trying 'help' subcommand...",
+                command_path,
+                err_msg
+            );
+            run_help_attempt(command_path, extra_args, "help", sandbox, timeout_ms).map_err(
+                |second_err| {
+                    anyhow::anyhow!(
+                        "Both --help and help failed.\nFirst error: {}\nSecond error: {}",
+                        err_msg,
+                        second_err
+                    )
+                },
+            )
+        }
+    }
 }
 
 /// Run `command_path --help`, synthesize its completion model, and render a
@@ -2220,6 +2254,47 @@ Options:
         assert!(err_msg.contains("exit code 42"));
         assert!(err_msg.contains("some stdout"));
         assert!(err_msg.contains("some stderr"));
+    }
+
+    #[test]
+    fn test_run_help_fallback_to_help() {
+        use std::io::Write;
+        let temp_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("test_run_help_fallback");
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let cmd_path = temp_dir.join("fallback_cmd");
+
+        let script = r#"#!/bin/sh
+if [ "$1" = "--help" ] || [ "$2" = "--help" ]; then
+    echo "invalid option --help" >&2
+    exit 1
+elif [ "$1" = "help" ] || [ "$2" = "help" ]; then
+    echo "Usage: fallback_cmd [options]"
+    exit 0
+else
+    echo "unknown args: $@" >&2
+    exit 1
+fi
+"#;
+        {
+            let mut f = std::fs::File::create(&cmd_path).unwrap();
+            f.write_all(script.as_bytes()).unwrap();
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&cmd_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&cmd_path, perms).unwrap();
+        }
+
+        let res = run_help(cmd_path.to_str().unwrap(), &[], false, 5000);
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let output = res.expect("should successfully fallback to 'help'");
+        assert!(output.contains("Usage: fallback_cmd [options]"));
     }
 
     #[test]
