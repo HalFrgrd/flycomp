@@ -1085,15 +1085,32 @@ fn merge_commands(help_cmd: Command, man_cmd: Command) -> Command {
     if merged.description.is_none() {
         merged.description = man_cmd.description.clone();
     }
+    if merged.author.is_none() {
+        merged.author = man_cmd.author.clone();
+    }
+    for alias in man_cmd.aliases {
+        if !merged.aliases.contains(&alias) {
+            merged.aliases.push(alias);
+        }
+    }
+
+    let mut matched_man_indices = std::collections::HashSet::new();
 
     for arg in &mut merged.args {
-        if let Some(man_arg) = man_cmd.args.iter().find(|a| {
+        if let Some((idx, man_arg)) = man_cmd.args.iter().enumerate().find(|&(_, a)| {
             (a.long.is_some() && a.long == arg.long) || (a.short.is_some() && a.short == arg.short)
         }) {
+            matched_man_indices.insert(idx);
             if arg.description.is_none()
                 || arg.description.as_deref().unwrap_or("").trim().is_empty()
             {
                 arg.description = man_arg.description.clone();
+            }
+            if arg.value_name.is_none() {
+                arg.value_name = man_arg.value_name.clone();
+            }
+            if arg.num_args.is_none() {
+                arg.num_args = man_arg.num_args.clone();
             }
             if arg.value_enum.is_none() {
                 arg.value_enum = man_arg.value_enum.clone();
@@ -1104,9 +1121,29 @@ fn merge_commands(help_cmd: Command, man_cmd: Command) -> Command {
         }
     }
 
+    for (idx, man_arg) in man_cmd.args.iter().enumerate() {
+        if !matched_man_indices.contains(&idx) {
+            merged.args.push(man_arg.clone());
+        }
+    }
+
+    let mut matched_man_subs = std::collections::HashSet::new();
+
     for sub in &mut merged.subcommands {
-        if let Some(man_sub) = man_cmd.subcommands.iter().find(|s| s.name == sub.name) {
+        if let Some((idx, man_sub)) = man_cmd
+            .subcommands
+            .iter()
+            .enumerate()
+            .find(|&(_, s)| s.name.is_some() && s.name == sub.name)
+        {
+            matched_man_subs.insert(idx);
             *sub = merge_commands(sub.clone(), man_sub.clone());
+        }
+    }
+
+    for (idx, man_sub) in man_cmd.subcommands.iter().enumerate() {
+        if !matched_man_subs.contains(&idx) {
+            merged.subcommands.push(man_sub.clone());
         }
     }
 
@@ -2653,11 +2690,24 @@ Options:
         let help_cmd = Command {
             name: Some("test".to_string()),
             description: None,
-            args: vec![Arg {
-                long: Some("--config".to_string()),
-                description: Some("Config path".to_string()),
-                value_name: Some("PATH".to_string()),
-                value_hint: ValueHint::Unknown,
+            author: Some("Help Author".to_string()),
+            aliases: vec!["t".to_string()],
+            args: vec![
+                Arg {
+                    long: Some("--config".to_string()),
+                    description: Some("Config path".to_string()),
+                    value_name: Some("PATH".to_string()),
+                    value_hint: ValueHint::Unknown,
+                    ..Default::default()
+                },
+                Arg {
+                    long: Some("--only-in-help".to_string()),
+                    description: Some("Help only option".to_string()),
+                    ..Default::default()
+                },
+            ],
+            subcommands: vec![Command {
+                name: Some("help-sub".to_string()),
                 ..Default::default()
             }],
             ..Command::default()
@@ -2666,12 +2716,25 @@ Options:
         let man_cmd = Command {
             name: Some("test".to_string()),
             description: Some("A parsed test tool description".to_string()),
-            args: vec![Arg {
-                long: Some("--config".to_string()),
-                description: None,
-                value_name: Some("PATH".to_string()),
-                value_hint: ValueHint::FilePath,
-                value_enum: Some(vec!["config.toml".to_string()]),
+            author: None,
+            aliases: vec!["test-alias".to_string()],
+            args: vec![
+                Arg {
+                    long: Some("--config".to_string()),
+                    description: None,
+                    value_name: Some("PATH".to_string()),
+                    value_hint: ValueHint::FilePath,
+                    value_enum: Some(vec!["config.toml".to_string()]),
+                    ..Default::default()
+                },
+                Arg {
+                    long: Some("--only-in-man".to_string()),
+                    description: Some("Man only option".to_string()),
+                    ..Default::default()
+                },
+            ],
+            subcommands: vec![Command {
+                name: Some("man-sub".to_string()),
                 ..Default::default()
             }],
             ..Command::default()
@@ -2683,12 +2746,58 @@ Options:
             merged.description,
             Some("A parsed test tool description".to_string())
         );
-        assert_eq!(merged.args[0].value_hint, ValueHint::FilePath);
+        assert_eq!(merged.author, Some("Help Author".to_string()));
         assert_eq!(
-            merged.args[0].value_enum,
-            Some(vec!["config.toml".to_string()])
+            merged.aliases,
+            vec!["t".to_string(), "test-alias".to_string()]
         );
-        assert_eq!(merged.args[0].description, Some("Config path".to_string()));
+
+        // Verify arguments (union)
+        assert_eq!(merged.args.len(), 3);
+
+        let config_arg = merged
+            .args
+            .iter()
+            .find(|a| a.long.as_deref() == Some("--config"))
+            .unwrap();
+        assert_eq!(config_arg.value_hint, ValueHint::FilePath);
+        assert_eq!(config_arg.value_enum, Some(vec!["config.toml".to_string()]));
+        assert_eq!(config_arg.description, Some("Config path".to_string()));
+
+        let help_only_arg = merged
+            .args
+            .iter()
+            .find(|a| a.long.as_deref() == Some("--only-in-help"))
+            .unwrap();
+        assert_eq!(
+            help_only_arg.description,
+            Some("Help only option".to_string())
+        );
+
+        let man_only_arg = merged
+            .args
+            .iter()
+            .find(|a| a.long.as_deref() == Some("--only-in-man"))
+            .unwrap();
+        assert_eq!(
+            man_only_arg.description,
+            Some("Man only option".to_string())
+        );
+
+        // Verify subcommands (union)
+        assert_eq!(merged.subcommands.len(), 2);
+        assert!(
+            merged
+                .subcommands
+                .iter()
+                .any(|s| s.name.as_deref() == Some("help-sub"))
+        );
+        assert!(
+            merged
+                .subcommands
+                .iter()
+                .any(|s| s.name.as_deref() == Some("man-sub"))
+        );
     }
 
     #[test]
