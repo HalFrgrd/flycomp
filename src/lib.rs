@@ -765,7 +765,7 @@ pub fn parse_possible_values(
 
             // Split the remaining string into tokens.
             let token_sep = TOKEN_SEP.get_or_init(|| {
-                regex::Regex::new(r"\s*(?:,\s*(?:or|and)?|\b(?:or|and)\b|\||/)\s*").unwrap()
+                regex::Regex::new(r"\s*(?:,\s*(?:or|and)?|\s+(?:or|and)\s+|\||/)\s*").unwrap()
             });
             let raw_tokens: Vec<&str> = token_sep.split(remaining_str).collect();
 
@@ -840,7 +840,7 @@ pub fn parse_possible_values(
                 }
 
                 let token_sep = TOKEN_SEP.get_or_init(|| {
-                    regex::Regex::new(r"\s*(?:,\s*(?:or|and)?|\b(?:or|and)\b|\||/)\s*").unwrap()
+                    regex::Regex::new(r"\s*(?:,\s*(?:or|and)?|\s+(?:or|and)\s+|\||/)\s*").unwrap()
                 });
                 let raw_tokens: Vec<&str> = token_sep.split(clause).collect();
 
@@ -2384,6 +2384,20 @@ Options:
         assert_eq!(
             parse_possible_values(None, Some("This option can be specified multiple times.")),
             None
+        );
+
+        // Test hyphenated values containing 'or'
+        assert_eq!(
+            parse_possible_values(
+                Some("[man-page-then-run-help|man-page|run-help|man-page-or-run-help]"),
+                None
+            ),
+            Some(vec![
+                "man-page-then-run-help".to_string(),
+                "man-page".to_string(),
+                "run-help".to_string(),
+                "man-page-or-run-help".to_string()
+            ])
         );
     }
 
