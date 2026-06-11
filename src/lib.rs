@@ -1350,24 +1350,20 @@ fn locate_manpage(command_name: &str) -> anyhow::Result<String> {
 
 fn read_manpage_source(manpage_path: &str) -> anyhow::Result<String> {
     increment_man_pages_read();
-    let decomp_cmd = if manpage_path.ends_with(".gz") {
-        Some(("gzip", vec!["-cd", manpage_path]))
+    if manpage_path.ends_with(".gz") {
+        use flate2::read::GzDecoder;
+        use std::io::Read;
+        let file = std::fs::File::open(manpage_path)
+            .with_context(|| format!("failed to open man page '{}'", manpage_path))?;
+        let mut decoder = GzDecoder::new(file);
+        let mut content = String::new();
+        decoder
+            .read_to_string(&mut content)
+            .with_context(|| format!("failed to decompress gzip man page '{}'", manpage_path))?;
+        Ok(content)
     } else if manpage_path.ends_with(".zst") {
-        Some(("zstd", vec!["-cd", manpage_path]))
-    } else if manpage_path.ends_with(".xz") {
-        Some(("xz", vec!["-cd", manpage_path]))
-    } else {
-        None
-    };
-
-    if let Some((cmd, args)) = decomp_cmd {
-        log::info!(
-            "flycomp: running decompression command: {} {}",
-            cmd,
-            args.join(" ")
-        );
-        let output = std::process::Command::new(cmd)
-            .args(&args)
+        let output = std::process::Command::new("zstd")
+            .args(["-cd", manpage_path])
             .output()
             .map_err(|e| {
                 anyhow::anyhow!(
@@ -1376,11 +1372,25 @@ fn read_manpage_source(manpage_path: &str) -> anyhow::Result<String> {
                     e
                 )
             })?;
-
         if !output.status.success() {
             anyhow::bail!("failed to decompress man page '{}'", manpage_path);
         }
-
+        String::from_utf8(output.stdout)
+            .with_context(|| format!("man page '{}' is not valid UTF-8", manpage_path))
+    } else if manpage_path.ends_with(".xz") {
+        let output = std::process::Command::new("xz")
+            .args(["-cd", manpage_path])
+            .output()
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "failed to read compressed man page '{}': {}",
+                    manpage_path,
+                    e
+                )
+            })?;
+        if !output.status.success() {
+            anyhow::bail!("failed to decompress man page '{}'", manpage_path);
+        }
         String::from_utf8(output.stdout)
             .with_context(|| format!("man page '{}' is not valid UTF-8", manpage_path))
     } else {
@@ -1566,6 +1576,7 @@ fn run_help_attempt(
         .env("GIT_PAGER", "cat")
         .env("LC_ALL", "C")
         .env("LANG", "C")
+        .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
