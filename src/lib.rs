@@ -322,65 +322,154 @@ pub fn extract_value_hint(value_name: Option<&str>, description: Option<&str>) -
         }
     };
 
+    // Helper to check if name contains a specific word (boundary-aware)
+    let name_has_word = |word: &str| -> bool {
+        if let Some(ref name) = name_lower {
+            let mut start = 0;
+            while let Some(pos) = name[start..].find(word) {
+                let actual_pos = start + pos;
+                let char_before_ok = if actual_pos > 0 {
+                    if let Some(prev_char) = name[..actual_pos].chars().next_back() {
+                        !prev_char.is_alphanumeric()
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                };
+                let char_after_ok = if actual_pos + word.len() < name.len() {
+                    if let Some(next_char) = name[actual_pos + word.len()..].chars().next() {
+                        !next_char.is_alphanumeric()
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                };
+                if char_before_ok && char_after_ok {
+                    return true;
+                }
+                if let Some((offset, _)) = name[actual_pos..].char_indices().nth(1) {
+                    start = actual_pos + offset;
+                } else {
+                    break;
+                }
+            }
+        }
+        false
+    };
+
+    // Helper to check if desc contains a specific word (boundary-aware)
+    let desc_has_word = |word: &str| -> bool {
+        if let Some(ref desc) = desc_lower {
+            let mut start = 0;
+            while let Some(pos) = desc[start..].find(word) {
+                let actual_pos = start + pos;
+                let char_before_ok = if actual_pos > 0 {
+                    if let Some(prev_char) = desc[..actual_pos].chars().next_back() {
+                        !prev_char.is_alphanumeric()
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                };
+                let char_after_ok = if actual_pos + word.len() < desc.len() {
+                    if let Some(next_char) = desc[actual_pos + word.len()..].chars().next() {
+                        !next_char.is_alphanumeric()
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                };
+                if char_before_ok && char_after_ok {
+                    return true;
+                }
+                if let Some((offset, _)) = desc[actual_pos..].char_indices().nth(1) {
+                    start = actual_pos + offset;
+                } else {
+                    break;
+                }
+            }
+        }
+        false
+    };
+
     // 1. Check value_name first (high precision)
-    if name_contains("url") || name_contains("uri") {
+    if name_has_word("url") || name_has_word("uri") {
         return ValueHint::Url;
     }
-    if name_contains("email") {
+    if name_has_word("email") {
         return ValueHint::EmailAddress;
     }
     if name_contains("hostname")
-        || name_contains("host")
-        || name_contains("domain")
-        || name_contains("address")
+        || name_has_word("host")
+        || name_has_word("domain")
+        || name_lower.as_ref().map_or(false, |n| n.ends_with("domain"))
+        || name_has_word("address")
+        || name_lower
+            .as_ref()
+            .map_or(false, |n| n.ends_with("address"))
     {
         return ValueHint::Hostname;
     }
     if name_contains("username") || name_contains("user_name") || name_contains("user-name") {
         return ValueHint::Username;
     }
-    if name_contains("command") || name_contains("cmd") {
+    if name_contains("command")
+        || name_has_word("cmd")
+        || name_lower.as_ref().map_or(false, |n| n.ends_with("cmd"))
+    {
         if name_contains("line") || name_contains("string") {
             return ValueHint::CommandString;
         }
         return ValueHint::CommandName;
     }
-    if name_contains("executable") || name_contains("binary") {
+    if name_has_word("executable") || name_has_word("binary") {
         return ValueHint::ExecutablePath;
     }
-    if name_contains("dir") || name_contains("directory") || name_contains("folder") {
+    if name_has_word("dir")
+        || name_contains("directory")
+        || name_contains("folder")
+        || name_lower.as_ref().map_or(false, |n| n.ends_with("dir"))
+    {
         return ValueHint::DirPath;
     }
     if name_contains("env-var") || name_contains("envvar") || name_contains("env_var") {
         return ValueHint::EnvVar;
     }
-    if name_contains("interface") || name_contains("iface") {
+    if name_has_word("interface") || name_has_word("iface") {
         return ValueHint::NetworkInterface;
     }
-    if name_contains("branch") {
+    if name_has_word("branch") {
         return ValueHint::GitBranch;
     }
-    if name_contains("revision") || name_contains("commit") {
+    if name_has_word("revision") || name_has_word("commit") {
         return ValueHint::GitRevision;
     }
-    if name_contains("service") || name_contains("unit") {
+    if name_has_word("service") || name_has_word("unit") {
         return ValueHint::SystemdUnit;
     }
     // Dict, Log, Archive, and File are FilePaths
-    if name_contains("file")
+    if name_has_word("file")
+        || name_lower
+            .as_ref()
+            .map_or(false, |n| n.ends_with("file") && n != "profile")
         || name_contains("filename")
         || name_contains("filepath")
-        || name_contains("dict")
+        || name_has_word("dict")
         || name_contains("dictionary")
-        || name_contains("log")
-        || name_contains("archive")
+        || name_has_word("log")
+        || name_contains("logfile")
+        || name_has_word("archive")
     {
         // Exclude "level" to avoid "log-level" or "log_level" matching file
         if !name_contains("level") {
             return ValueHint::FilePath;
         }
     }
-    if name_contains("path") {
+    if name_has_word("path") || name_lower.as_ref().map_or(false, |n| n.ends_with("path")) {
         if desc_contains("directory") || desc_contains("folder") {
             return ValueHint::DirPath;
         }
@@ -396,13 +485,13 @@ pub fn extract_value_hint(value_name: Option<&str>, description: Option<&str>) -
     // 2. Check description (lower precision, needs more specific phrases)
     if desc_contains("http://")
         || desc_contains("https://")
-        || desc_contains("url")
-        || desc_contains("uri")
+        || desc_has_word("url")
+        || desc_has_word("uri")
         || desc_contains("endpoint")
     {
         return ValueHint::Url;
     }
-    if desc_contains("email") || desc_contains("e-mail") {
+    if desc_has_word("email") || desc_has_word("e-mail") {
         return ValueHint::EmailAddress;
     }
     if desc_contains("hostname")
@@ -490,14 +579,13 @@ pub fn extract_value_hint(value_name: Option<&str>, description: Option<&str>) -
             || name == "rfile"
             || name == "debug-file"
         {
-            if desc_contains("directory") || desc_contains("folder") || desc_contains("dir") {
+            if desc_contains("directory") || desc_contains("folder") || desc_has_word("dir") {
                 return ValueHint::DirPath;
             }
-            if desc_contains("file")
-                || desc_contains("path")
-                || desc_contains("output")
-                || desc_contains("write")
-                || desc_contains("read")
+            if desc_has_word("file")
+                || desc_has_word("path")
+                || desc_has_word("write")
+                || desc_has_word("read")
             {
                 return ValueHint::FilePath;
             }
@@ -2363,6 +2451,44 @@ Options:
         assert_eq!(
             extract_value_hint(None, Some("systemd unit service")),
             ValueHint::SystemdUnit
+        );
+
+        // Test false positive avoidance (boundary-aware matching)
+        assert_eq!(extract_value_hint(Some("curl"), None), ValueHint::Unknown);
+        assert_eq!(
+            extract_value_hint(Some("profile"), None),
+            ValueHint::Unknown
+        );
+        assert_eq!(
+            extract_value_hint(Some("redirect"), None),
+            ValueHint::Unknown
+        );
+        assert_eq!(extract_value_hint(Some("login"), None), ValueHint::Unknown);
+        assert_eq!(
+            extract_value_hint(Some("community"), None),
+            ValueHint::Unknown
+        );
+
+        // Description false positives
+        assert_eq!(
+            extract_value_hint(None, Some("during normal operation")),
+            ValueHint::Unknown
+        );
+        assert_eq!(
+            extract_value_hint(None, Some("security guidelines")),
+            ValueHint::Unknown
+        );
+        assert_eq!(
+            extract_value_hint(Some("output"), Some("number of threads to spawn")),
+            ValueHint::Unknown
+        );
+        assert_eq!(
+            extract_value_hint(Some("output"), Some("direct output to stdout")),
+            ValueHint::Unknown
+        );
+        assert_eq!(
+            extract_value_hint(Some("output"), Some("already existing headers")),
+            ValueHint::Unknown
         );
     }
 
