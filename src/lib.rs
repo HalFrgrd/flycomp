@@ -1205,10 +1205,12 @@ fn command_basename(command_path: &str) -> String {
 
 fn load_manpage_command(command_path: &str, recurse_limit: usize) -> anyhow::Result<Command> {
     let cmd_name = command_basename(command_path);
+    log::info!("flycomp: loading man page for '{}'", cmd_name);
     let manpage_path = locate_manpage(&cmd_name)?;
     let manpage_content = read_manpage_source(&manpage_path)?;
 
     let loader = |name: &str| -> Option<String> {
+        log::info!("flycomp: loading subcommand man page for '{}'", name);
         let path = locate_manpage(name).ok()?;
         read_manpage_source(&path).ok()
     };
@@ -1218,6 +1220,7 @@ fn load_manpage_command(command_path: &str, recurse_limit: usize) -> anyhow::Res
 }
 
 fn locate_manpage(command_name: &str) -> anyhow::Result<String> {
+    log::info!("flycomp: locating man page for '{}'", command_name);
     let output = std::process::Command::new("man")
         .args(["-w", command_name])
         .output()
@@ -1234,6 +1237,7 @@ fn locate_manpage(command_name: &str) -> anyhow::Result<String> {
         .find(|line| !line.is_empty())
         .ok_or_else(|| anyhow::anyhow!("man page path missing for '{}'", command_name))?;
 
+    log::info!("flycomp: found man page at '{}'", path);
     Ok(path.to_string())
 }
 
@@ -1250,8 +1254,13 @@ fn read_manpage_source(manpage_path: &str) -> anyhow::Result<String> {
     };
 
     if let Some((cmd, args)) = decomp_cmd {
+        log::info!(
+            "flycomp: running decompression command: {} {}",
+            cmd,
+            args.join(" ")
+        );
         let output = std::process::Command::new(cmd)
-            .args(args)
+            .args(&args)
             .output()
             .map_err(|e| {
                 anyhow::anyhow!(
@@ -1417,6 +1426,25 @@ pub fn run_help(
         std::process::Command::new(&actual_command)
     };
 
+    let cmd_args_str = if extra_args.is_empty() {
+        String::new()
+    } else {
+        format!("{} ", extra_args.join(" "))
+    };
+    if use_sandbox {
+        log::info!(
+            "flycomp: running command (sandboxed): bwrap --ro-bind / / --dev /dev --proc /proc --unshare-all -- {} {}--help",
+            actual_command,
+            cmd_args_str
+        );
+    } else {
+        log::info!(
+            "flycomp: running command: {} {}--help",
+            actual_command,
+            cmd_args_str
+        );
+    }
+
     let mut child = child
         .args(extra_args)
         .arg("--help")
@@ -1500,6 +1528,19 @@ pub fn run_help(
                     );
                 }
             }
+        }
+    }
+
+    if let Some(status) = exit_status {
+        if !status.success() {
+            let code = status.code().unwrap_or(-1);
+            anyhow::bail!(
+                "command '{}' failed with exit code {}.\n--- stdout ---\n{}\n--- stderr ---\n{}",
+                actual_command,
+                code,
+                stdout.trim(),
+                stderr.trim()
+            );
         }
     }
 
@@ -2041,6 +2082,40 @@ Options:
 
         let output = res.expect("run_help should succeed");
         assert!(output.contains("--foo"));
+    }
+
+    #[test]
+    fn test_run_help_non_zero_exit() {
+        use std::io::Write;
+        let temp_dir = std::env::current_dir()
+            .unwrap()
+            .join("target")
+            .join("test_run_help_exit_fail");
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let cmd_path = temp_dir.join("failing_cmd");
+
+        let script = "#!/bin/sh\necho \"some stdout\"\necho \"some stderr\" >&2\nexit 42";
+        {
+            let mut f = std::fs::File::create(&cmd_path).unwrap();
+            f.write_all(script.as_bytes()).unwrap();
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&cmd_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&cmd_path, perms).unwrap();
+        }
+
+        let res = run_help(cmd_path.to_str().unwrap(), &[], false, 5000);
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let err = res.expect_err("should fail with non-zero exit status");
+        let err_msg = err.to_string();
+        assert!(err_msg.contains("exit code 42"));
+        assert!(err_msg.contains("some stdout"));
+        assert!(err_msg.contains("some stderr"));
     }
 
     #[test]
