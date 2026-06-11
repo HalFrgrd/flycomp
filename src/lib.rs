@@ -44,10 +44,11 @@ pub use parse_help::{parse_help, parse_help_argparse, parse_help_clap, parse_hel
 #[value(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum SynthesisStrategy {
-    #[default]
     ManPageThenRunHelp,
     ManPage,
     RunHelp,
+    #[default]
+    ManPageOrRunHelp,
 }
 
 #[derive(Clone, Debug, clap::ValueEnum)]
@@ -1037,6 +1038,36 @@ where
                         command_path,
                         error
                     );
+                    Ok(SynthesisOutcome {
+                        command: synthesize_from_help(command_path, help_runner, recurse_limit)?,
+                        strategy_used: SynthesisMethod::RunHelp,
+                    })
+                }
+            }
+        }
+        SynthesisStrategy::ManPageOrRunHelp => {
+            match load_manpage_command(command_path, recurse_limit) {
+                Ok(man_command)
+                    if !man_command.args.is_empty() || !man_command.subcommands.is_empty() =>
+                {
+                    Ok(SynthesisOutcome {
+                        command: man_command,
+                        strategy_used: SynthesisMethod::ManPage,
+                    })
+                }
+                res => {
+                    if let Err(ref e) = res {
+                        log::debug!(
+                            "flycomp: man page failed for '{}': {}. Falling back to --help",
+                            command_path,
+                            e
+                        );
+                    } else {
+                        log::debug!(
+                            "flycomp: man page for '{}' returned empty command. Falling back to --help",
+                            command_path
+                        );
+                    }
                     Ok(SynthesisOutcome {
                         command: synthesize_from_help(command_path, help_runner, recurse_limit)?,
                         strategy_used: SynthesisMethod::RunHelp,
@@ -2376,5 +2407,32 @@ Options:
             Some(vec!["config.toml".to_string()])
         );
         assert_eq!(merged.args[0].description, Some("Config path".to_string()));
+    }
+
+    #[test]
+    fn test_strategy_man_page_or_run_help() {
+        let help_called = std::sync::atomic::AtomicBool::new(false);
+        let help_runner = |_args: &[&str]| -> anyhow::Result<String> {
+            help_called.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok("Usage: non_existent_cmd\n\nOptions:\n  --foo  bar".to_string())
+        };
+
+        let res = synthesize_completion_with(
+            "non_existent_cmd",
+            &help_runner,
+            SynthesisStrategy::ManPageOrRunHelp,
+            5,
+        );
+        let outcome = res.expect("synthesis should succeed");
+        assert!(help_called.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(outcome.strategy_used, SynthesisMethod::RunHelp);
+        assert_eq!(outcome.command.name.as_deref(), Some("non_existent_cmd"));
+        assert!(
+            outcome
+                .command
+                .args
+                .iter()
+                .any(|a| a.long.as_deref() == Some("--foo"))
+        );
     }
 }
