@@ -902,7 +902,7 @@ pub fn to_clap_command(cmd: &Command) -> clap::Command {
                 clap_arg.value_parser(clap::builder::PossibleValuesParser::new(value_enum.clone()));
         }
 
-        if arg.value_hint != ValueHint::Unknown {
+        if arg.value_hint != ValueHint::Unknown && arg.value_enum.is_none() {
             let clap_hint = match arg.value_hint {
                 ValueHint::Unknown => clap::ValueHint::Unknown,
                 ValueHint::Other => clap::ValueHint::Other,
