@@ -217,6 +217,71 @@ impl Command {
         }
     }
 
+    pub fn deduplicate_args(&mut self) {
+        let mut unique_args: Vec<Arg> = Vec::new();
+        for arg in std::mem::take(&mut self.args) {
+            let mut found_idx = None;
+            if let Some(ref long) = arg.long {
+                found_idx = unique_args
+                    .iter()
+                    .position(|a| a.long.as_ref() == Some(long));
+            }
+            if found_idx.is_none() {
+                if let Some(ref short) = arg.short {
+                    found_idx = unique_args
+                        .iter()
+                        .position(|a| a.short.as_ref() == Some(short));
+                }
+            }
+
+            if let Some(idx) = found_idx {
+                let existing = &mut unique_args[idx];
+                if existing.short.is_none() {
+                    existing.short = arg.short;
+                }
+                if existing.long.is_none() {
+                    existing.long = arg.long;
+                }
+                if existing.value_name.is_none() {
+                    existing.value_name = arg.value_name;
+                }
+                if existing.num_args.is_none() {
+                    existing.num_args = arg.num_args;
+                }
+                if existing.value_hint == ValueHint::Unknown {
+                    existing.value_hint = arg.value_hint;
+                }
+                if let (Some(d1), Some(d2)) = (&existing.description, &arg.description) {
+                    if d1 != d2 && !d1.contains(d2) {
+                        existing.description = Some(format!("{} {}", d1, d2));
+                    }
+                } else if existing.description.is_none() {
+                    existing.description = arg.description;
+                }
+                match (&mut existing.value_enum, arg.value_enum) {
+                    (Some(v1), Some(v2)) => {
+                        for val in v2 {
+                            if !v1.contains(&val) {
+                                v1.push(val);
+                            }
+                        }
+                    }
+                    (None, Some(v2)) => {
+                        existing.value_enum = Some(v2);
+                    }
+                    _ => {}
+                }
+            } else {
+                unique_args.push(arg);
+            }
+        }
+        self.args = unique_args;
+
+        for sub in &mut self.subcommands {
+            sub.deduplicate_args();
+        }
+    }
+
     pub fn populate_possible_values(&mut self) {
         for arg in &mut self.args {
             if arg.value_enum.is_none() {
@@ -485,6 +550,17 @@ pub fn parse_possible_values(
     value_name: Option<&str>,
     description: Option<&str>,
 ) -> Option<Vec<String>> {
+    // 0. Check if value_name is a literal lowercase value (like links, follow-links)
+    if let Some(vt) = value_name {
+        if !vt.starts_with('<') && !vt.starts_with('[') && !vt.ends_with('>') && !vt.ends_with(']')
+        {
+            let clean_type = vt.trim_matches(|c| c == '[' || c == ']' || c == '<' || c == '>');
+            if !clean_type.is_empty() && clean_type.chars().all(|c| c.is_lowercase() || c == '-') {
+                return Some(vec![clean_type.to_string()]);
+            }
+        }
+    }
+
     // 1. Try to parse from value_name (e.g. {info,debug} or info|debug or 0..5)
     if let Some(vt) = value_name {
         let clean_type = vt.trim_matches(|c| c == '[' || c == ']' || c == '<' || c == '>');
@@ -529,6 +605,19 @@ pub fn parse_possible_values(
 
     // 2. Try to parse from description
     if let Some(desc) = description {
+        // Try to parse DWARF selector format like a/=abbrev, A/=addr, etc. from description
+        let dwarf_re = regex::Regex::new(r"([a-zA-Z0-9_-]+)\s*/=\s*([a-zA-Z0-9_-]+)").unwrap();
+        let mut dwarf_vals = Vec::new();
+        for caps in dwarf_re.captures_iter(desc) {
+            let val = caps.get(2).unwrap().as_str().to_string();
+            if !dwarf_vals.contains(&val) {
+                dwarf_vals.push(val);
+            }
+        }
+        if !dwarf_vals.is_empty() {
+            return Some(dwarf_vals);
+        }
+
         if let Some(list_vals) = parse_bulleted_list_values(desc) {
             return Some(list_vals);
         }

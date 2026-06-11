@@ -1175,6 +1175,7 @@ fn parse_manpage_base(cmd_name: &str, content: &str) -> Option<Command> {
         // Expand bracketed negation flags (like --[no-]color) into both variants
         cmd.expand_no_options();
         cmd.populate_possible_values();
+        cmd.deduplicate_args();
         Some(cmd)
     }
 }

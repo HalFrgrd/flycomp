@@ -84,6 +84,7 @@ pub fn parse_help(help: &str) -> Command {
     // Expand bracketed negation flags (like --[no-]color) into both variants
     cmd.expand_no_options();
     cmd.populate_possible_values();
+    cmd.deduplicate_args();
 
     // Fallback: if we have subcommands but no name was parsed from Usage,
     // try to extract the command name from patterns like "common <name> commands"
@@ -412,6 +413,14 @@ pub(crate) fn parse_flag_tokens(token: &str) -> (Option<String>, Option<String>,
                         }
                         piece_str.drain(start_bracket..=end_bracket);
                     }
+                }
+            }
+
+            let check_len = piece_str.find('=').unwrap_or(piece_str.len());
+            if let Some(bracket_idx) = piece_str[..check_len].find('[') {
+                let suffix = &piece_str[bracket_idx..];
+                if !suffix.starts_with("[no-]") && !suffix.starts_with("[no]") {
+                    piece_str = piece_str[..bracket_idx].to_string();
                 }
             }
 
@@ -872,12 +881,20 @@ pub fn parse_help_clap(help: &str) -> Command {
                     collect_continuation(&lines, i + 1, flag_indent, desc_col);
                 i = next_i;
 
-                let description = match (inline_desc, cont_desc.as_str()) {
+                let mut description = match (inline_desc, cont_desc.as_str()) {
                     (Some(d), "") => Some(d),
                     (None, d) if !d.is_empty() => Some(d.to_string()),
                     (Some(d), rest) => Some(format!("{} {}", d, rest)),
                     (None, _) => None,
                 };
+
+                if let Some(bracket_idx) = token_part.find('[') {
+                    let bracketed_part = &token_part[bracket_idx..];
+                    description = Some(match description {
+                        Some(desc) => format!("{} {}", bracketed_part, desc),
+                        None => bracketed_part.to_string(),
+                    });
+                }
 
                 let num_args = if value_name.is_some() {
                     Some("1".to_string())
@@ -974,12 +991,20 @@ pub fn parse_help_argparse(help: &str) -> Command {
                     collect_continuation(&lines, i + 1, flag_indent, desc_col);
                 i = next_i;
 
-                let description = match (inline_desc, cont_desc.as_str()) {
+                let mut description = match (inline_desc, cont_desc.as_str()) {
                     (Some(d), "") => Some(d),
                     (None, d) if !d.is_empty() => Some(d.to_string()),
                     (Some(d), rest) => Some(format!("{} {}", d, rest)),
                     (None, _) => None,
                 };
+
+                if let Some(bracket_idx) = token_part.find('[') {
+                    let bracketed_part = &token_part[bracket_idx..];
+                    description = Some(match description {
+                        Some(desc) => format!("{} {}", bracketed_part, desc),
+                        None => bracketed_part.to_string(),
+                    });
+                }
 
                 let num_args = if value_name.is_some() {
                     Some("1".to_string())
@@ -1046,12 +1071,20 @@ pub fn parse_help_generic(help: &str) -> Command {
             let (cont_desc, next_i) = collect_continuation(&lines, i + 1, flag_indent, desc_col);
             i = next_i;
 
-            let description = match (inline_desc, cont_desc.as_str()) {
+            let mut description = match (inline_desc, cont_desc.as_str()) {
                 (Some(d), "") => Some(d),
                 (None, d) if !d.is_empty() => Some(d.to_string()),
                 (Some(d), rest) => Some(format!("{} {}", d, rest)),
                 (None, _) => None,
             };
+
+            if let Some(bracket_idx) = token_part.find('[') {
+                let bracketed_part = &token_part[bracket_idx..];
+                description = Some(match description {
+                    Some(desc) => format!("{} {}", bracketed_part, desc),
+                    None => bracketed_part.to_string(),
+                });
+            }
 
             let num_args = if value_name.is_some() {
                 Some("1".to_string())
@@ -2192,6 +2225,41 @@ mod tests {
                         ..Default::default()
                     },
                     description_contains: "Dump the contents of section",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-w".to_string()),
+                        long: Some("--debug-dump".to_string()),
+                        value_name: Some("links".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "abbrev".to_string(),
+                            "addr".to_string(),
+                            "aranges".to_string(),
+                            "cu_index".to_string(),
+                            "decodedline".to_string(),
+                            "frames".to_string(),
+                            "frames-interp".to_string(),
+                            "gdb_index".to_string(),
+                            "info".to_string(),
+                            "loc".to_string(),
+                            "macro".to_string(),
+                            "pubnames".to_string(),
+                            "pubtypes".to_string(),
+                            "Ranges".to_string(),
+                            "rawline".to_string(),
+                            "str".to_string(),
+                            "str-offsets".to_string(),
+                            "trace_abbrev".to_string(),
+                            "trace_aranges".to_string(),
+                            "trace_info".to_string(),
+                            "links".to_string(),
+                            "follow-links".to_string(),
+                            "no-follow-links".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "Display the contents of DWARF debug sections",
                 },
             ],
         );
