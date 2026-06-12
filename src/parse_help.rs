@@ -838,7 +838,11 @@ pub fn parse_help_clap(help: &str) -> Command {
             || (trimmed
                 .chars()
                 .all(|c| c.is_uppercase() || c.is_whitespace() || c == '-')
-                && !trimmed.is_empty()))
+                && !trimmed.is_empty())
+            || {
+                let lower = trimmed.to_lowercase();
+                lower == "options" || lower == "flags" || lower == "arguments" || lower == "args"
+            })
             && {
                 let lower = trimmed.to_lowercase();
                 lower.contains("options")
@@ -863,7 +867,10 @@ pub fn parse_help_clap(help: &str) -> Command {
                     continue;
                 }
                 if indent_of(line) == 0 {
-                    break;
+                    let trimmed = line.trim();
+                    if !trimmed.starts_with('-') && !trimmed.starts_with('[') {
+                        break;
+                    }
                 }
                 let flag_indent = indent_of(line);
                 let flag_part = line.trim();
@@ -3289,6 +3296,272 @@ Commands:
                         ..Default::default()
                     },
                     description_contains: "stop after NUM selected lines",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn test_fd_help() {
+        let cmd = parse_test_help("fd");
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--max-results".to_string()),
+                        value_name: Some("count".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Limit the number of search results",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-j".to_string()),
+                        long: Some("--threads".to_string()),
+                        value_name: Some("num".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Set number of threads to use",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--search-path".to_string()),
+                        value_name: Some("search-path".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::AnyPath,
+                        ..Default::default()
+                    },
+                    description_contains: "Provide paths to search as an alternative",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-H".to_string()),
+                        long: Some("--hidden".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Include hidden directories and files",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-I".to_string()),
+                        long: Some("--no-ignore".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Show search results from files and directories that would otherwise be ignored",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-g".to_string()),
+                        long: Some("--glob".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Perform a glob-based search instead of a regular expression search",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--regex".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Perform a regular-expression based search",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-F".to_string()),
+                        long: Some("--fixed-strings".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Treat the pattern as a literal string",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-a".to_string()),
+                        long: Some("--absolute-path".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Shows the full path starting from the root",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-L".to_string()),
+                        long: Some("--follow".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "symbolic links are also traversed",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-p".to_string()),
+                        long: Some("--full-path".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "pattern is matched against the full",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-0".to_string()),
+                        long: Some("--print0".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Separate search results by the null character",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-E".to_string()),
+                        long: Some("--exclude".to_string()),
+                        value_name: Some("pattern".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Exclude files/directories that match the given glob pattern",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-e".to_string()),
+                        long: Some("--extension".to_string()),
+                        value_name: Some("ext".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "filter search results by their file extension",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn test_rsync_help() {
+        let cmd = parse_test_help("rsync");
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--port".to_string()),
+                        value_name: Some("PORT".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "specify double-colon alternate port number",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--files-from".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "read list of source-file names from FILE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: Some("--verbose".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "increase verbosity",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-q".to_string()),
+                        long: Some("--quiet".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "suppress non-error messages",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-c".to_string()),
+                        long: Some("--checksum".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "skip based on checksum",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-a".to_string()),
+                        long: Some("--archive".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "archive mode is",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: Some("--recursive".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "recurse into directories",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-R".to_string()),
+                        long: Some("--relative".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "use relative path names",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-b".to_string()),
+                        long: Some("--backup".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "make backups",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--backup-dir".to_string()),
+                        value_name: Some("DIR".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::DirPath,
+                        ..Default::default()
+                    },
+                    description_contains: "make backups into hierarchy based in DIR",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--exclude".to_string()),
+                        value_name: Some("PATTERN".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "exclude files matching PATTERN",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--exclude-from".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "read exclude patterns from FILE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--include".to_string()),
+                        value_name: Some("PATTERN".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "don't exclude files matching PATTERN",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--include-from".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "read include patterns from FILE",
                 },
             ],
         );
