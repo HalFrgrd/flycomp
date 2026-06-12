@@ -398,7 +398,7 @@ pub(crate) fn parse_flag_tokens(token: &str) -> (Option<String>, Option<String>,
 
     // Tokenise: split on ", " first, then whitespace
     let pieces: Vec<&str> = token.split_whitespace().collect();
-    for piece in &pieces {
+    for &piece in &pieces {
         if piece.starts_with("--") {
             // May be "--flag" or "--flag=<VAL>" or "--flag[=<VAL>]"
             let mut piece_str = piece.to_string();
@@ -468,6 +468,10 @@ pub(crate) fn parse_flag_tokens(token: &str) -> (Option<String>, Option<String>,
             let count = short_candidate.chars().count();
             if count == 1 || (count == 2 && short_candidate.ends_with('#')) || is_bracketed_short {
                 short = Some(format!("-{short_candidate}"));
+            } else if count > 1 {
+                if long.is_none() {
+                    long = Some(format!("--{short_candidate}"));
+                }
             }
         } else if piece.starts_with('<') || piece.starts_with('[') {
             // Meta-variable — only capture the first one found so that description
@@ -483,18 +487,16 @@ pub(crate) fn parse_flag_tokens(token: &str) -> (Option<String>, Option<String>,
             }
         } else if value_name.is_none()
             && !piece.is_empty()
-            && (piece.chars().all(|c| {
-                c.is_uppercase()
-                    || c == '_'
-                    || c == '-'
-                    || c == '#'
-                    || c == '|'
-                    || c == '{'
-                    || c == '}'
-            }))
+            && !piece.starts_with('-')
+            && piece != ","
+            && piece != "|"
+            && piece != "/"
+            && piece != "or"
         {
             let clean = piece.trim_end_matches(',');
-            value_name = Some(clean.to_string());
+            if !clean.is_empty() {
+                value_name = Some(clean.to_string());
+            }
         }
     }
     (short, long, value_name)
@@ -1710,6 +1712,8 @@ mod tests {
                 ExpectedArg {
                     arg: Arg {
                         long: Some("--config".to_string()),
+                        value_name: Some("string".to_string()),
+                        num_args: Some("1".to_string()),
                         ..Default::default()
                     },
                     description_contains: "config file",
@@ -1717,6 +1721,8 @@ mod tests {
                 ExpectedArg {
                     arg: Arg {
                         long: Some("--log-level".to_string()),
+                        value_name: Some("string".to_string()),
+                        num_args: Some("1".to_string()),
                         ..Default::default()
                     },
                     description_contains: "Log level",
@@ -2590,6 +2596,8 @@ Commands:
                 ExpectedArg {
                     arg: Arg {
                         long: Some("--config".to_string()),
+                        value_name: Some("string".to_string()),
+                        num_args: Some("1".to_string()),
                         value_hint: ValueHint::Unknown,
                         ..Default::default()
                     },
@@ -2599,6 +2607,8 @@ Commands:
                     arg: Arg {
                         short: Some("-c".to_string()),
                         long: Some("--context".to_string()),
+                        value_name: Some("string".to_string()),
+                        num_args: Some("1".to_string()),
                         ..Default::default()
                     },
                     description_contains: "Name of the context to use",
@@ -2615,6 +2625,8 @@ Commands:
                     arg: Arg {
                         short: Some("-H".to_string()),
                         long: Some("--host".to_string()),
+                        value_name: Some("string".to_string()),
+                        num_args: Some("1".to_string()),
                         value_hint: ValueHint::Unknown,
                         ..Default::default()
                     },
@@ -2624,6 +2636,8 @@ Commands:
                     arg: Arg {
                         short: Some("-l".to_string()),
                         long: Some("--log-level".to_string()),
+                        value_name: Some("string".to_string()),
+                        num_args: Some("1".to_string()),
                         ..Default::default()
                     },
                     description_contains: "Set the logging level",
@@ -2639,6 +2653,8 @@ Commands:
                 ExpectedArg {
                     arg: Arg {
                         long: Some("--tlscacert".to_string()),
+                        value_name: Some("string".to_string()),
+                        num_args: Some("1".to_string()),
                         value_hint: ValueHint::Unknown,
                         ..Default::default()
                     },
@@ -2647,6 +2663,8 @@ Commands:
                 ExpectedArg {
                     arg: Arg {
                         long: Some("--tlscert".to_string()),
+                        value_name: Some("string".to_string()),
+                        num_args: Some("1".to_string()),
                         value_hint: ValueHint::Unknown,
                         ..Default::default()
                     },
@@ -2655,6 +2673,8 @@ Commands:
                 ExpectedArg {
                     arg: Arg {
                         long: Some("--tlskey".to_string()),
+                        value_name: Some("string".to_string()),
+                        num_args: Some("1".to_string()),
                         value_hint: ValueHint::Unknown,
                         ..Default::default()
                     },
@@ -3562,6 +3582,137 @@ Commands:
                         ..Default::default()
                     },
                     description_contains: "read include patterns from FILE",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn test_ffmpeg_help() {
+        let cmd = parse_test_help("ffmpeg");
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-L".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "show license",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--loglevel".to_string()),
+                        value_name: Some("loglevel".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "set logging level",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: None,
+                        value_name: Some("loglevel".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "set logging level",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-y".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "overwrite output files",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-n".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "never overwrite output files",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-f".to_string()),
+                        long: None,
+                        value_name: Some("fmt".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "force format",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-c".to_string()),
+                        long: None,
+                        value_name: Some("codec".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "codec name",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--codec".to_string()),
+                        value_name: Some("codec".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "codec name",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-t".to_string()),
+                        long: None,
+                        value_name: Some("duration".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "record or transcode",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--fs".to_string()),
+                        value_name: Some("limit_size".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "set the limit file size in bytes",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--filter_script".to_string()),
+                        value_name: Some("filename".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "read stream filtergraph description from a file",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--vn".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "disable video",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--an".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "disable audio",
                 },
             ],
         );
