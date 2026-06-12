@@ -848,6 +848,10 @@ pub fn parse_help_clap(help: &str) -> Command {
                     || lower.contains("builder")
                     || lower.contains("parameters")
                     || lower.contains("settings")
+                    || lower.contains("control")
+                    || lower.contains("selection")
+                    || lower.contains("miscellaneous")
+                    || lower.contains("interpretation")
             };
 
         if is_options_section {
@@ -1502,6 +1506,7 @@ mod tests {
                         long: Some("--count".to_string()),
                         value_name: Some("INTEGER".to_string()),
                         num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
                         ..Default::default()
                     },
                     description_contains: "Number of greetings",
@@ -1859,6 +1864,7 @@ mod tests {
                         long: Some("--max-count".to_string()),
                         value_name: Some("n".to_string()),
                         num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
                         ..Default::default()
                     },
                     description_contains: "Limit the number of commits",
@@ -3231,6 +3237,60 @@ Commands:
             cmd.args
                 .iter()
                 .any(|a| a.long.as_deref() == Some("--no-verbose"))
+        );
+    }
+
+    #[test]
+    fn test_grep_help() {
+        let cmd = parse_test_help("grep");
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-A".to_string()),
+                        long: Some("--after-context".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "print NUM lines of trailing context",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-B".to_string()),
+                        long: Some("--before-context".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "print NUM lines of leading context",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-C".to_string()),
+                        long: Some("--context".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "print NUM lines of output context",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-m".to_string()),
+                        long: Some("--max-count".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "stop after NUM selected lines",
+                },
+            ],
         );
     }
 }

@@ -101,6 +101,7 @@ pub enum ValueHint {
     GitBranch,
     GitRevision,
     SystemdUnit,
+    Integral,
 }
 
 /// A single command-line argument / flag.
@@ -397,6 +398,21 @@ pub fn extract_value_hint(value_name: Option<&str>, description: Option<&str>) -
     };
 
     // 1. Check value_name first (high precision)
+    if name_has_word("int")
+        || name_contains("integer")
+        || name_has_word("num")
+        || name_contains("number")
+        || name_contains("count")
+        || name_contains("index")
+        || name_contains("port")
+        || name_has_word("pid")
+        || name_has_word("uid")
+        || name_has_word("gid")
+        || name_has_word("offset")
+        || name_has_word("limit")
+    {
+        return ValueHint::Integral;
+    }
     if name_has_word("url") || name_has_word("uri") {
         return ValueHint::Url;
     }
@@ -541,6 +557,18 @@ pub fn extract_value_hint(value_name: Option<&str>, description: Option<&str>) -
     }
     if desc_contains("systemd service") || desc_contains("systemd unit") {
         return ValueHint::SystemdUnit;
+    }
+    if desc_contains("port number")
+        || desc_contains("process id")
+        || desc_contains("user id")
+        || desc_contains("group id")
+        || desc_contains("number of")
+        || desc_has_word("port")
+        || desc_has_word("int")
+        || desc_has_word("integer")
+        || desc_has_word("count")
+    {
+        return ValueHint::Integral;
     }
 
     // Paths/Directories/Files in description
@@ -1035,7 +1063,8 @@ pub fn to_clap_command(cmd: &Command) -> clap::Command {
                 | ValueHint::NetworkInterface
                 | ValueHint::GitBranch
                 | ValueHint::GitRevision
-                | ValueHint::SystemdUnit => clap::ValueHint::Other,
+                | ValueHint::SystemdUnit
+                | ValueHint::Integral => clap::ValueHint::Other,
             };
             clap_arg = clap_arg.value_hint(clap_hint);
         }
@@ -1944,6 +1973,15 @@ mod tests {
                     num_args: None,
                     ..Default::default()
                 },
+                Arg {
+                    long: Some("--port".to_string()),
+                    short: Some("-p".to_string()),
+                    description: Some("Port number.".to_string()),
+                    value_name: Some("<PORT>".to_string()),
+                    value_hint: ValueHint::Integral,
+                    num_args: Some("1".to_string()),
+                    ..Default::default()
+                },
             ],
             subcommands: vec![Command {
                 name: Some("sub".to_string()),
@@ -1970,6 +2008,13 @@ mod tests {
             arg_ids.contains(&"output"),
             "output arg missing: {arg_ids:?}"
         );
+        assert!(arg_ids.contains(&"port"), "port arg missing: {arg_ids:?}");
+
+        let port_arg = clap_cmd
+            .get_arguments()
+            .find(|a| a.get_id().as_str() == "port")
+            .unwrap();
+        assert_eq!(port_arg.get_value_hint(), clap::ValueHint::Other);
 
         // Check subcommand is present.
         let sub_names: Vec<&str> = clap_cmd.get_subcommands().map(|s| s.get_name()).collect();
@@ -2734,6 +2779,22 @@ fi
             ValueHint::SystemdUnit
         );
 
+        // Test Integral
+        assert_eq!(extract_value_hint(Some("port"), None), ValueHint::Integral);
+        assert_eq!(extract_value_hint(Some("count"), None), ValueHint::Integral);
+        assert_eq!(
+            extract_value_hint(None, Some("the process id of target")),
+            ValueHint::Integral
+        );
+        assert_eq!(
+            extract_value_hint(None, Some("number of connections")),
+            ValueHint::Integral
+        );
+        assert_eq!(
+            extract_value_hint(Some("NUM"), Some("print NUM lines of leading context")),
+            ValueHint::Integral
+        );
+
         // Test false positive avoidance (boundary-aware matching)
         assert_eq!(extract_value_hint(Some("curl"), None), ValueHint::Unknown);
         assert_eq!(
@@ -2761,7 +2822,7 @@ fi
         );
         assert_eq!(
             extract_value_hint(Some("output"), Some("number of threads to spawn")),
-            ValueHint::Unknown
+            ValueHint::Integral
         );
         assert_eq!(
             extract_value_hint(Some("output"), Some("direct output to stdout")),

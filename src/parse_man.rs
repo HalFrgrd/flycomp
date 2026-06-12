@@ -1888,6 +1888,39 @@ None documented.
                     },
                     description_contains: "Do not ignore case distinctions",
                 },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-A".to_string()),
+                        long: Some("--after-context".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "lines of trailing context",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-B".to_string()),
+                        long: Some("--before-context".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "lines of leading context",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-C".to_string()),
+                        long: Some("--context".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "lines of output context",
+                },
             ],
         );
     }
@@ -2089,6 +2122,7 @@ None documented.
                         long: None,
                         value_name: Some("count".to_string()),
                         num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::Integral,
                         ..Default::default()
                     },
                     description_contains: "Stop after sending count",

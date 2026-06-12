@@ -29,4 +29,4 @@ cargo fmt
 ## Guidelines
 1. **Safety**: The `--help` strategy executes binaries using [std::process::Command](src/lib.rs#L393-L397). Never run untrusted or malicious binaries.
 2. **Adding Parsers**: To support new help schemas, update `HelpFormat` in [src/parse_help.rs](src/parse_help.rs) and write matching parser functions.
-3. **Tests**: Keep help and man page parser tests within their respective modules, using fixtures from [tests/man_pages/](tests/man_pages/) where appropriate.
+3. **Tests**: Keep help and man page parser tests within their respective modules. Never hardcode test help texts or man page contents inline; always save them under `tests/help_texts/` or `tests/man_pages/` respectively and load them in the tests.
