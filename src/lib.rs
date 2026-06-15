@@ -1103,7 +1103,7 @@ pub fn synthesize_completion<F>(
     recurse_limit: usize,
 ) -> anyhow::Result<Command>
 where
-    F: Fn(&[&str]) -> anyhow::Result<String>,
+    F: Fn(&[&str]) -> anyhow::Result<String> + Sync + Send,
 {
     Ok(synthesize_completion_with(command_path, &help_runner, strategy, recurse_limit)?.command)
 }
@@ -1186,7 +1186,7 @@ fn synthesize_completion_with<F>(
     recurse_limit: usize,
 ) -> anyhow::Result<SynthesisOutcome>
 where
-    F: Fn(&[&str]) -> anyhow::Result<String>,
+    F: Fn(&[&str]) -> anyhow::Result<String> + Sync + Send,
 {
     match strategy {
         SynthesisStrategy::RunHelp => Ok(SynthesisOutcome {
@@ -1434,7 +1434,7 @@ fn synthesize_from_help<F>(
     recurse_limit: usize,
 ) -> anyhow::Result<Command>
 where
-    F: Fn(&[&str]) -> anyhow::Result<String>,
+    F: Fn(&[&str]) -> anyhow::Result<String> + Sync + Send,
 {
     // ── top-level help ───────────────────────────────────────────────────────
     let top_help = help_runner(&[])?;
@@ -1444,49 +1444,168 @@ where
     let cmd_name = command_basename(command_path);
     root.name = Some(cmd_name);
 
-    // ── iterative subcommand exploration ─────────────────────────────────────
-    // Seed the stack with every top-level subcommand.
-    let mut stack: Vec<Vec<String>> = root
+    if recurse_limit == 0 {
+        return Ok(root);
+    }
+
+    // ── parallel subcommand exploration ─────────────────────────────────────
+    // Seed the queue with every top-level subcommand.
+    let initial_tasks: Vec<Vec<String>> = root
         .subcommands
         .iter()
         .filter_map(|s| s.name.clone().map(|n| vec![n]))
         .collect();
 
-    while let Some(path) = stack.pop() {
-        if path.len() > recurse_limit {
-            continue;
+    if initial_tasks.is_empty() {
+        return Ok(root);
+    }
+
+    use std::collections::{HashMap, VecDeque};
+    use std::sync::{Condvar, Mutex};
+
+    struct WorkState {
+        queue: VecDeque<Vec<String>>,
+        pending_tasks: usize,
+        shutdown: bool,
+    }
+
+    struct TaskQueue {
+        state: Mutex<WorkState>,
+        condvar: Condvar,
+    }
+
+    let task_queue = TaskQueue {
+        state: Mutex::new(WorkState {
+            pending_tasks: initial_tasks.len(),
+            queue: VecDeque::from(initial_tasks),
+            shutdown: false,
+        }),
+        condvar: Condvar::new(),
+    };
+
+    let results = Mutex::new(HashMap::<Vec<String>, Command>::new());
+
+    // Determine the number of worker threads, capping at 12 by default unless FLYCOMP_THREADS is set.
+    let mut num_threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
+
+    if let Ok(val) = std::env::var("FLYCOMP_THREADS") {
+        if let Ok(parsed) = val.parse::<usize>() {
+            num_threads = parsed;
         }
+    } else {
+        num_threads = num_threads.min(12);
+    }
 
-        // Build the argv slice for the help invocation.
-        let path_strs: Vec<&str> = path.iter().map(String::as_str).collect();
-        let help_output = match help_runner(&path_strs) {
-            Ok(s) if !s.trim().is_empty() => s,
-            Ok(_) => continue,
-            Err(e) => {
-                log::debug!("flycomp: skipping '{}': {}", path_strs.join(" "), e);
-                continue;
-            }
-        };
+    let shared_help_runs = std::sync::atomic::AtomicUsize::new(0);
 
-        let parsed = parse_help(&help_output);
+    std::thread::scope(|s| {
+        for _ in 0..num_threads {
+            s.spawn(|| {
+                loop {
+                    let mut state = task_queue.state.lock().unwrap();
+                    while state.queue.is_empty() && !state.shutdown && state.pending_tasks > 0 {
+                        state = task_queue.condvar.wait(state).unwrap();
+                    }
 
-        // Navigate to the target node in the tree and update it.
-        if let Some(node) = find_subcommand_mut(&mut root, &path) {
-            // Push newly discovered sub-subcommands onto the stack before
-            // overwriting them so we can explore them later.
-            for child in &parsed.subcommands {
-                if let Some(child_name) = &child.name {
-                    let mut child_path = path.clone();
-                    child_path.push(child_name.clone());
-                    stack.push(child_path);
+                    if state.shutdown || (state.queue.is_empty() && state.pending_tasks == 0) {
+                        break;
+                    }
+
+                    let path = state.queue.pop_front().unwrap();
+                    drop(state);
+
+                    // Build the argv slice for the help invocation.
+                    let path_strs: Vec<&str> = path.iter().map(String::as_str).collect();
+                    let help_output_res = help_runner(&path_strs);
+
+                    let mut next_tasks = Vec::new();
+                    let mut parsed_cmd = None;
+
+                    match help_output_res {
+                        Ok(s) if !s.trim().is_empty() => {
+                            let parsed = parse_help(&s);
+                            // If we can recurse deeper, find next subcommands
+                            if path.len() < recurse_limit {
+                                for child in &parsed.subcommands {
+                                    if let Some(child_name) = &child.name {
+                                        let mut child_path = path.clone();
+                                        child_path.push(child_name.clone());
+                                        next_tasks.push(child_path);
+                                    }
+                                }
+                            }
+                            parsed_cmd = Some(parsed);
+                        }
+                        Ok(_) => {}
+                        Err(e) => {
+                            log::debug!("flycomp: skipping '{}': {}", path_strs.join(" "), e);
+                        }
+                    }
+
+                    let mut state = task_queue.state.lock().unwrap();
+                    if let Some(parsed) = parsed_cmd {
+                        results.lock().unwrap().insert(path, parsed);
+                    }
+
+                    let new_len = next_tasks.len();
+                    state.queue.extend(next_tasks);
+                    state.pending_tasks += new_len;
+                    state.pending_tasks -= 1;
+
+                    if state.pending_tasks == 0 {
+                        task_queue.condvar.notify_all();
+                    } else if new_len > 0 {
+                        task_queue.condvar.notify_all();
+                    }
                 }
-            }
+                let worker_runs = get_help_runs();
+                shared_help_runs.fetch_add(worker_runs, std::sync::atomic::Ordering::Relaxed);
+                reset_stats();
+            });
+        }
+    });
 
-            node.args = parsed.args;
-            node.subcommands = parsed.subcommands;
+    let total_worker_runs = shared_help_runs.into_inner();
+    for _ in 0..total_worker_runs {
+        increment_help_runs();
+    }
+
+    let results = results.into_inner().unwrap();
+
+    // ── sequential tree reconstruction ─────────────────────────────────────
+    fn update_node(
+        node: &mut Command,
+        path: &mut Vec<String>,
+        results: &HashMap<Vec<String>, Command>,
+        recurse_limit: usize,
+    ) {
+        if path.len() > recurse_limit {
+            return;
+        }
+        if let Some(parsed) = results.get(path) {
+            node.args = parsed.args.clone();
+            node.subcommands = parsed.subcommands.clone();
             if node.description.is_none() {
-                node.description = parsed.description;
+                node.description = parsed.description.clone();
             }
+        }
+        for child in &mut node.subcommands {
+            if let Some(name) = &child.name {
+                path.push(name.clone());
+                update_node(child, path, results, recurse_limit);
+                path.pop();
+            }
+        }
+    }
+
+    let mut path = Vec::new();
+    for child in &mut root.subcommands {
+        if let Some(name) = &child.name {
+            path.push(name.clone());
+            update_node(child, &mut path, &results, recurse_limit);
+            path.pop();
         }
     }
 
@@ -1496,6 +1615,7 @@ where
 /// Navigate the [`Command`] tree following `path` (a slice of subcommand
 /// names) and return a mutable reference to the deepest node, or `None` if
 /// any step along the path cannot be found.
+#[allow(dead_code)]
 fn find_subcommand_mut<'a>(root: &'a mut Command, path: &[String]) -> Option<&'a mut Command> {
     let mut current = root;
     for name in path {
