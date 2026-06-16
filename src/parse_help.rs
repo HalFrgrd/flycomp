@@ -442,18 +442,14 @@ fn is_valid_flag_name(name: &str) -> bool {
 }
 
 /// Try to parse a flag token like `-v`, `--verbose`, or `--output <FILE>`.
-/// Returns `(short, long, value_name)`.
+/// Returns `(short, longs, value_name, num_args)`.
 pub(crate) fn parse_flag_tokens(
     token: &str,
-) -> (
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-) {
+) -> (Option<String>, Vec<String>, Option<String>, Option<String>) {
     // Split on commas / whitespace to handle "-v, --verbose <FILE>"
     let mut short = None;
-    let mut long = None;
+    let mut real_longs = Vec::new();
+    let mut fallback_longs = Vec::new();
     let mut value_name = None;
     let mut num_args = None;
 
@@ -483,15 +479,18 @@ pub(crate) fn parse_flag_tokens(
                 }
             }
 
-            if let Some((flag, val)) = piece_str.split_once('=') {
-                long = Some(flag.trim_end_matches(',').trim_end_matches('.').to_string());
+            let parsed_long = if let Some((flag, val)) = piece_str.split_once('=') {
                 value_name = Some(val.trim_matches(|c| c == '<' || c == '>').to_string());
+                flag.trim_end_matches(',').trim_end_matches('.').to_string()
             } else {
                 let mut l = piece_str.trim_end_matches(',').to_string();
                 while l.ends_with('.') {
                     l.pop();
                 }
-                long = Some(l);
+                l
+            };
+            if !real_longs.contains(&parsed_long) {
+                real_longs.push(parsed_long);
             }
         } else if let Some(short_candidate) = piece.strip_prefix('-') {
             let mut short_candidate = short_candidate.trim_end_matches(',').to_string();
@@ -532,8 +531,9 @@ pub(crate) fn parse_flag_tokens(
             if count == 1 || (count == 2 && short_candidate.ends_with('#')) || is_bracketed_short {
                 short = Some(format!("-{short_candidate}"));
             } else if count > 1 {
-                if long.is_none() {
-                    long = Some(format!("--{short_candidate}"));
+                let l = format!("--{short_candidate}");
+                if !fallback_longs.contains(&l) {
+                    fallback_longs.push(l);
                 }
             }
         } else if piece.starts_with('<') || piece.starts_with('[') {
@@ -568,11 +568,13 @@ pub(crate) fn parse_flag_tokens(
             short = None;
         }
     }
-    if let Some(ref l) = long {
-        if !is_valid_flag_name(l) {
-            long = None;
-        }
-    }
+
+    let mut longs = if !real_longs.is_empty() {
+        real_longs
+    } else {
+        fallback_longs
+    };
+    longs.retain(|l| is_valid_flag_name(l));
 
     if num_args.is_none() {
         let mut num_values = 0;
@@ -607,7 +609,7 @@ pub(crate) fn parse_flag_tokens(
         }
     }
 
-    (short, long, value_name, num_args)
+    (short, longs, value_name, num_args)
 }
 
 fn detect_description_column(lines: &[&str]) -> Option<usize> {
@@ -640,8 +642,8 @@ fn is_flag_declaration_line(line: &str) -> bool {
         return false;
     }
     let (token_part, _) = split_option_line(trimmed);
-    let (short, long, _, _) = parse_flag_tokens(token_part);
-    short.is_some() || long.is_some()
+    let (short, longs, _, _) = parse_flag_tokens(token_part);
+    short.is_some() || !longs.is_empty()
 }
 
 /// Collect continuation lines: lines whose indent > `base_indent` (or blank).
@@ -996,9 +998,9 @@ pub fn parse_help_clap(help: &str) -> Command {
                 }
 
                 let (token_part, inline_desc) = split_option_line(flag_part);
-                let (short, long, value_name, num_args) = parse_flag_tokens(token_part);
+                let (short, longs, value_name, num_args) = parse_flag_tokens(token_part);
 
-                if short.is_some() || long.is_some() || flag_part.starts_with('[') {
+                if short.is_some() || !longs.is_empty() || flag_part.starts_with('[') {
                     let (cont_desc, next_i) =
                         collect_continuation(&lines, i + 1, flag_indent, desc_col);
                     i = next_i;
@@ -1018,14 +1020,32 @@ pub fn parse_help_clap(help: &str) -> Command {
                         });
                     }
 
+                    let mut first_long = None;
+                    let mut extra_longs = Vec::new();
+                    if !longs.is_empty() {
+                        first_long = Some(longs[0].clone());
+                        extra_longs = longs[1..].to_vec();
+                    }
+
                     cmd.args.push(Arg {
                         short,
-                        long,
-                        description,
-                        value_name,
-                        num_args,
+                        long: first_long,
+                        description: description.clone(),
+                        value_name: value_name.clone(),
+                        num_args: num_args.clone(),
                         ..Default::default()
                     });
+
+                    for extra_long in extra_longs {
+                        cmd.args.push(Arg {
+                            short: None,
+                            long: Some(extra_long),
+                            description: description.clone(),
+                            value_name: value_name.clone(),
+                            num_args: num_args.clone(),
+                            ..Default::default()
+                        });
+                    }
                 } else {
                     i += 1;
                 }
@@ -1099,14 +1119,14 @@ pub fn parse_help_argparse(help: &str) -> Command {
                 let flag_part = line.trim();
 
                 let (token_part, inline_desc) = split_option_line(flag_part);
-                let (short, long, value_name, num_args) = if flag_part.starts_with('-') {
+                let (short, longs, value_name, num_args) = if flag_part.starts_with('-') {
                     parse_flag_tokens(token_part)
                 } else {
                     let name_token = token_part.split_whitespace().next().unwrap_or("");
-                    (None, Some(name_token.to_string()), None, None)
+                    (None, vec![name_token.to_string()], None, None)
                 };
 
-                if short.is_some() || long.is_some() || !flag_part.starts_with('-') {
+                if short.is_some() || !longs.is_empty() || !flag_part.starts_with('-') {
                     let (cont_desc, next_i) =
                         collect_continuation(&lines, i + 1, flag_indent, desc_col);
                     i = next_i;
@@ -1126,14 +1146,32 @@ pub fn parse_help_argparse(help: &str) -> Command {
                         });
                     }
 
+                    let mut first_long = None;
+                    let mut extra_longs = Vec::new();
+                    if !longs.is_empty() {
+                        first_long = Some(longs[0].clone());
+                        extra_longs = longs[1..].to_vec();
+                    }
+
                     cmd.args.push(Arg {
                         short,
-                        long,
-                        description,
-                        value_name,
-                        num_args,
+                        long: first_long,
+                        description: description.clone(),
+                        value_name: value_name.clone(),
+                        num_args: num_args.clone(),
                         ..Default::default()
                     });
+
+                    for extra_long in extra_longs {
+                        cmd.args.push(Arg {
+                            short: None,
+                            long: Some(extra_long),
+                            description: description.clone(),
+                            value_name: value_name.clone(),
+                            num_args: num_args.clone(),
+                            ..Default::default()
+                        });
+                    }
                 } else {
                     i += 1;
                 }
@@ -1183,9 +1221,9 @@ pub fn parse_help_generic(help: &str) -> Command {
         if flag_part.starts_with('-') {
             let flag_indent = indent_of(line);
             let (token_part, inline_desc) = split_option_line(flag_part);
-            let (short, long, value_name, num_args) = parse_flag_tokens(token_part);
+            let (short, longs, value_name, num_args) = parse_flag_tokens(token_part);
 
-            if short.is_some() || long.is_some() {
+            if short.is_some() || !longs.is_empty() {
                 let (cont_desc, next_i) =
                     collect_continuation(&lines, i + 1, flag_indent, desc_col);
                 i = next_i;
@@ -1205,14 +1243,32 @@ pub fn parse_help_generic(help: &str) -> Command {
                     });
                 }
 
+                let mut first_long = None;
+                let mut extra_longs = Vec::new();
+                if !longs.is_empty() {
+                    first_long = Some(longs[0].clone());
+                    extra_longs = longs[1..].to_vec();
+                }
+
                 cmd.args.push(Arg {
                     short,
-                    long,
-                    description,
-                    value_name,
-                    num_args,
+                    long: first_long,
+                    description: description.clone(),
+                    value_name: value_name.clone(),
+                    num_args: num_args.clone(),
                     ..Default::default()
                 });
+
+                for extra_long in extra_longs {
+                    cmd.args.push(Arg {
+                        short: None,
+                        long: Some(extra_long),
+                        description: description.clone(),
+                        value_name: value_name.clone(),
+                        num_args: num_args.clone(),
+                        ..Default::default()
+                    });
+                }
                 continue;
             }
         }
@@ -2410,16 +2466,16 @@ mod tests {
 
     #[test]
     fn test_parse_flag_tokens_ignores_multi_character_short_forms() {
-        let (short, long, value_name, num_args) = parse_flag_tokens("-wk --debug-dump=links");
+        let (short, longs, value_name, num_args) = parse_flag_tokens("-wk --debug-dump=links");
         assert_eq!(short, None);
-        assert_eq!(long.as_deref(), Some("--debug-dump"));
+        assert_eq!(longs, vec!["--debug-dump".to_string()]);
         assert_eq!(value_name.as_deref(), Some("links"));
         assert_eq!(num_args.as_deref(), Some("1"));
 
-        let (short, long, value_name, num_args) =
+        let (short, longs, value_name, num_args) =
             parse_flag_tokens("-U[dlexhi] --unicode=[default|locale|escape|hex|highlight|invalid]");
         assert_eq!(short, Some("-U".to_string()));
-        assert_eq!(long.as_deref(), Some("--unicode"));
+        assert_eq!(longs, vec!["--unicode".to_string()]);
         assert_eq!(
             value_name.as_deref(),
             Some("[default|locale|escape|hex|highlight|invalid]")
@@ -3564,6 +3620,22 @@ Commands:
                         ..Default::default()
                     },
                     description_contains: "stop after NUM selected lines",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-q".to_string()),
+                        long: Some("--quiet".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "suppress all normal output",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--silent".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "suppress all normal output",
                 },
             ],
         );
@@ -5573,6 +5645,14 @@ Commands:
                 ExpectedArg {
                     arg: Arg {
                         short: Some("-q".to_string()),
+                        long: Some("--quiet".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "never print headers",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
                         long: Some("--silent".to_string()),
                         ..Default::default()
                     },
