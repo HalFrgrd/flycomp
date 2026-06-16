@@ -1723,6 +1723,8 @@ fn run_help_attempt(
         .env("MANPAGER", "cat")
         .env("SYSTEMD_PAGER", "cat")
         .env("GIT_PAGER", "cat")
+        .env("NO_COLOR", "1")
+        .env("CLICOLOR", "0")
         .env("LC_ALL", "C")
         .env("LANG", "C")
         .stdin(std::process::Stdio::null())

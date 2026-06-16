@@ -4373,4 +4373,380 @@ Commands:
             ],
         );
     }
+
+    #[test]
+    fn test_fzf_help() {
+        let cmd = parse_test_help("fzf");
+        assert_eq!(cmd.name.as_deref(), Some("fzf"));
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-e".to_string()),
+                        long: Some("--exact".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Enable exact-match",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-i".to_string()),
+                        long: Some("--ignore-case".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Case-insensitive match",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--smart-case".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Smart-case match",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--scheme".to_string()),
+                        value_name: Some("SCHEME".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Scoring scheme",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-n".to_string()),
+                        long: Some("--nth".to_string()),
+                        value_name: Some("N[,..]".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Comma-separated list of field index expressions",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--with-nth".to_string()),
+                        value_name: Some("N[,..]".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Transform the presentation of each line",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-d".to_string()),
+                        long: Some("--delimiter".to_string()),
+                        value_name: Some("STR".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Field delimiter regex",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--tail".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Maximum number of items to keep in memory",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--tiebreak".to_string()),
+                        value_name: Some("CRI[,..]".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "length".to_string(),
+                            "chunk".to_string(),
+                            "pathname".to_string(),
+                            "begin".to_string(),
+                            "end".to_string(),
+                            "index".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "Comma-separated list of sort criteria",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--read0".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Read input delimited by ASCII NUL",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--tmux".to_string()),
+                        value_name: Some("OPTS".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "center".to_string(),
+                            "top".to_string(),
+                            "bottom".to_string(),
+                            "left".to_string(),
+                            "right".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "Start fzf in a tmux popup",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--border".to_string()),
+                        value_name: Some("STYLE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "rounded".to_string(),
+                            "sharp".to_string(),
+                            "bold".to_string(),
+                            "block".to_string(),
+                            "thinblock".to_string(),
+                            "double".to_string(),
+                            "horizontal".to_string(),
+                            "vertical".to_string(),
+                            "top".to_string(),
+                            "bottom".to_string(),
+                            "left".to_string(),
+                            "right".to_string(),
+                            "line".to_string(),
+                            "none".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "Draw border around the finder",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--border-label".to_string()),
+                        value_name: Some("LABEL".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Label to print on the border",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--border-label-pos".to_string()),
+                        value_name: Some("COL".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec!["0".to_string(), "center".to_string()]),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Position of the border label",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-m".to_string()),
+                        long: Some("--multi".to_string()),
+                        value_name: Some("MAX".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Enable multi-select",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--wrap-sign".to_string()),
+                        value_name: Some("STR".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Indicator for wrapped lines",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--freeze-left".to_string()),
+                        value_name: Some("N".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Number of fields to freeze on the left",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--pointer".to_string()),
+                        value_name: Some("STR".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Pointer to the current line",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--marker".to_string()),
+                        value_name: Some("STR".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Multi-select marker",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--list-border".to_string()),
+                        value_name: Some("STYLE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "rounded".to_string(),
+                            "sharp".to_string(),
+                            "bold".to_string(),
+                            "block".to_string(),
+                            "thinblock".to_string(),
+                            "double".to_string(),
+                            "horizontal".to_string(),
+                            "vertical".to_string(),
+                            "top".to_string(),
+                            "bottom".to_string(),
+                            "left".to_string(),
+                            "right".to_string(),
+                            "none".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "Draw border around the list section",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--list-label-pos".to_string()),
+                        value_name: Some("COL".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec!["0".to_string(), "center".to_string()]),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Position of the list label",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--info-command".to_string()),
+                        value_name: Some("COMMAND".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::CommandName,
+                        ..Default::default()
+                    },
+                    description_contains: "Command to generate info line",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--preview".to_string()),
+                        value_name: Some("COMMAND".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::CommandName,
+                        ..Default::default()
+                    },
+                    description_contains: "Command to preview highlighted line",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--preview-window".to_string()),
+                        value_name: Some("OPT".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "up".to_string(),
+                            "down".to_string(),
+                            "left".to_string(),
+                            "right".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "Preview window layout",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--walker".to_string()),
+                        value_name: Some("OPTS".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "file".to_string(),
+                            "follow".to_string(),
+                            "hidden".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "default: file,follow,hidden",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--walker-root".to_string()),
+                        value_name: Some("DIR".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::DirPath,
+                        ..Default::default()
+                    },
+                    description_contains: "List of directories to walk",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--history".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "File to store fzf search history",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--history-size".to_string()),
+                        value_name: Some("N".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Maximum number of entries to keep",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Display version information and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Show this message",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--man".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Show man page",
+                },
+            ],
+        );
+    }
 }
