@@ -1794,11 +1794,11 @@ fn run_help_attempt(
             if !status.success() {
                 if stderr.contains("bwrap:") || stderr.contains("bubblewrap:") {
                     let code = status.code().unwrap_or(-1);
-                    eprintln!("bubblewrap error (exit code {}): {}", code, stderr.trim());
+                    eprintln!("bubblewrap error (exit code {}): {}", code, stderr);
                     anyhow::bail!(
                         "bubblewrap exited with error code {}: {}",
                         code,
-                        stderr.trim()
+                        stderr
                     );
                 }
             }
@@ -1812,8 +1812,8 @@ fn run_help_attempt(
                 "command '{}' failed with exit code {}.\n--- stdout ---\n{}\n--- stderr ---\n{}",
                 actual_command,
                 code,
-                stdout.trim(),
-                stderr.trim()
+                stdout,
+                stderr
             );
         }
     }
