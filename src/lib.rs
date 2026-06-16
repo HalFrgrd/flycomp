@@ -667,6 +667,20 @@ fn parse_bulleted_list_values(desc: &str) -> Option<Vec<String>> {
     None
 }
 
+fn has_path_slash(s: &str) -> bool {
+    let chars: Vec<char> = s.chars().collect();
+    for i in 0..chars.len() {
+        if chars[i] == '/' {
+            let preceded_by_space = i == 0 || chars[i - 1].is_whitespace();
+            let followed_by_non_space = i + 1 < chars.len() && !chars[i + 1].is_whitespace();
+            if preceded_by_space && followed_by_non_space {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 pub fn parse_possible_values(
     value_name: Option<&str>,
     description: Option<&str>,
@@ -792,10 +806,20 @@ pub fn parse_possible_values(
             }
 
             // Split the remaining string into tokens.
-            let token_sep = TOKEN_SEP.get_or_init(|| {
-                regex::Regex::new(r"\s*(?:,\s*(?:or|and)?|\s+(?:or|and)\s+|\||/)\s*").unwrap()
-            });
-            let raw_tokens: Vec<&str> = token_sep.split(remaining_str).collect();
+            let has_path = has_path_slash(remaining_str);
+            let raw_tokens: Vec<&str> = if has_path {
+                static TOKEN_SEP_NO_SLASH: std::sync::OnceLock<regex::Regex> =
+                    std::sync::OnceLock::new();
+                let sep = TOKEN_SEP_NO_SLASH.get_or_init(|| {
+                    regex::Regex::new(r"\s*(?:,\s*(?:or|and)?|\s+(?:or|and)\s+|\|)\s*").unwrap()
+                });
+                sep.split(remaining_str).collect()
+            } else {
+                let token_sep = TOKEN_SEP.get_or_init(|| {
+                    regex::Regex::new(r"\s*(?:,\s*(?:or|and)?|\s+(?:or|and)\s+|\||/)\s*").unwrap()
+                });
+                token_sep.split(remaining_str).collect()
+            };
 
             let mut values = Vec::new();
             for token in raw_tokens {
@@ -2683,6 +2707,23 @@ fi
                 "run-help".to_string(),
                 "man-page-or-run-help".to_string()
             ])
+        );
+
+        // Test path slash ignoring
+        assert_eq!(
+            parse_possible_values(
+                None,
+                Some("WHERE can be: null: Redirect output to /dev/null (the default)")
+            ),
+            None
+        );
+        assert_eq!(
+            parse_possible_values(None, Some("allowed values: /bin/sh, /bin/bash")),
+            None
+        );
+        assert_eq!(
+            parse_possible_values(None, Some("choices: yes/no")),
+            Some(vec!["yes".to_string(), "no".to_string()])
         );
     }
 

@@ -4822,7 +4822,6 @@ Use asynchronous IO.
                         long: Some("--input".to_string()),
                         value_name: Some("WHERE".to_string()),
                         num_args: Some("1".to_string()),
-                        value_enum: Some(vec!["dev".to_string()]),
                         ..Default::default()
                     },
                     description_contains: "Control where the input of the benchmark comes from",
