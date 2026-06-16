@@ -2688,12 +2688,15 @@ None documented.
             let arg = find_arg(&cmd, &item);
             assert_eq!(arg.short, item.arg.short);
             assert_eq!(arg.value_name, item.arg.value_name);
+            let expected_hint = if arg.takes_value() {
+                crate::extract_value_hint(arg.value_name.as_deref(), arg.description.as_deref())
+            } else {
+                crate::ValueHint::Unknown
+            };
             assert_eq!(
-                arg.value_hint,
-                crate::extract_value_hint(arg.value_name.as_deref(), arg.description.as_deref()),
+                arg.value_hint, expected_hint,
                 "ValueHint mismatch for arg {:?} / {:?}",
-                arg.short,
-                arg.long
+                arg.short, arg.long
             );
             assert!(normalize_desc(arg.description.as_deref()).contains(item.description_contains));
         }
@@ -3755,7 +3758,7 @@ Use asynchronous IO.
                         value_name: None,
                         num_args: None,
                         value_enum: None,
-                        value_hint: crate::ValueHint::CommandString,
+                        value_hint: crate::ValueHint::Unknown,
                         description: None,
                     },
                     description_contains: "files processed",
@@ -3827,7 +3830,7 @@ Use asynchronous IO.
                         value_name: None,
                         num_args: None,
                         value_enum: None,
-                        value_hint: crate::ValueHint::FilePath,
+                        value_hint: crate::ValueHint::Unknown,
                         description: None,
                     },
                     description_contains: "leading slashes",

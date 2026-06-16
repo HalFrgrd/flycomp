@@ -139,6 +139,15 @@ pub struct Arg {
     pub value_hint: ValueHint,
 }
 
+impl Arg {
+    pub fn takes_value(&self) -> bool {
+        self.value_name.is_some()
+            || self.num_args.is_some()
+            || self.short.as_ref().map_or(false, |s| s.ends_with('#'))
+            || self.long.as_ref().map_or(false, |l| l.ends_with('#'))
+    }
+}
+
 /// A parsed command (or sub-command).
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
 pub struct Command {
@@ -303,12 +312,12 @@ impl Command {
     pub fn populate_possible_values(&mut self) {
         for arg in &mut self.args {
             if arg.value_enum.is_none() {
-                let should_parse = if arg.value_name.is_none() && arg.num_args.is_none() {
+                let should_parse = if arg.takes_value() {
+                    true
+                } else {
                     arg.description
                         .as_ref()
                         .map_or(false, |desc| desc.contains("/="))
-                } else {
-                    true
                 };
                 if should_parse {
                     arg.value_enum = parse_possible_values(
@@ -318,8 +327,10 @@ impl Command {
                 }
             }
             if arg.value_hint == ValueHint::Unknown {
-                arg.value_hint =
-                    extract_value_hint(arg.value_name.as_deref(), arg.description.as_deref());
+                if arg.takes_value() {
+                    arg.value_hint =
+                        extract_value_hint(arg.value_name.as_deref(), arg.description.as_deref());
+                }
             }
         }
         for sub in &mut self.subcommands {
@@ -437,6 +448,7 @@ pub fn extract_value_hint(value_name: Option<&str>, description: Option<&str>) -
         || name_has_word("gid")
         || name_has_word("offset")
         || name_has_word("limit")
+        || name_has_word("n")
     {
         return ValueHint::Integral;
     }
@@ -2078,15 +2090,15 @@ pub mod test_helpers {
                     expected_arg.arg
                 );
             } else {
+                let expected_hint = if arg.takes_value() {
+                    crate::extract_value_hint(arg.value_name.as_deref(), arg.description.as_deref())
+                } else {
+                    ValueHint::Unknown
+                };
                 assert_eq!(
-                    arg.value_hint,
-                    crate::extract_value_hint(
-                        arg.value_name.as_deref(),
-                        arg.description.as_deref()
-                    ),
+                    arg.value_hint, expected_hint,
                     "ValueHint mismatch for arg {:?} / {:?}",
-                    arg.short,
-                    arg.long
+                    arg.short, arg.long
                 );
             }
             if let Some(expected_enum) = &expected_arg.arg.value_enum {

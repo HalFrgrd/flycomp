@@ -4200,6 +4200,7 @@ Commands:
                         long: Some("--max-depth".to_string()),
                         value_name: Some("N".to_string()),
                         num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
                         ..Default::default()
                     },
                     description_contains: "print the total for a directory",
@@ -4328,6 +4329,11 @@ Commands:
                         long: Some("--time-style".to_string()),
                         value_name: Some("STYLE".to_string()),
                         num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "full-iso".to_string(),
+                            "long-iso".to_string(),
+                            "iso".to_string(),
+                        ]),
                         ..Default::default()
                     },
                     description_contains: "show times using STYLE",
