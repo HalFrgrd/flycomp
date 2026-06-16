@@ -781,6 +781,9 @@ fn parse_tagged_blocks(cmd: &mut Command, section: &str) -> bool {
                 || next_trimmed.starts_with(".Sh")
                 || next_trimmed.starts_with(".SS")
                 || next_trimmed.starts_with(".Ss")
+                || next_trimmed.starts_with(".PP")
+                || next_trimmed.starts_with(".Pp")
+                || next_trimmed.starts_with(".sp")
                 || next_trimmed.starts_with(".UNINDENT")
                 || next_trimmed == ".UN"
             {
@@ -1668,6 +1671,66 @@ None documented.
                 },
                 ExpectedArg {
                     arg: Arg {
+                        short: Some("-e".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "equivalent to -vE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-E".to_string()),
+                        long: Some("--show-ends".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "display $ at end of each line",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-n".to_string()),
+                        long: Some("--number".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "number all output lines",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-s".to_string()),
+                        long: Some("--squeeze-blank".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "suppress repeated empty output lines",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-t".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "equivalent to -vT",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-T".to_string()),
+                        long: Some("--show-tabs".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "display TAB characters as ^I",
+                },
+                ExpectedArg {
+                    arg: Arg {
                         short: Some("-u".to_string()),
                         long: None,
                         value_name: None,
@@ -1678,6 +1741,16 @@ None documented.
                 },
                 ExpectedArg {
                     arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: Some("--show-nonprinting".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "use ^ and M- notation",
+                },
+                ExpectedArg {
+                    arg: Arg {
                         short: None,
                         long: Some("--help".to_string()),
                         value_name: None,
@@ -1685,6 +1758,16 @@ None documented.
                         ..Default::default()
                     },
                     description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
                 },
             ],
         );
@@ -2037,7 +2120,7 @@ None documented.
     fn parses_real_mkdir_fixture() {
         let cmd = parse_test_manpage("mkdir.1");
         assert_expected_subcommands(&cmd, &[]);
-        assert_contains_expected_args(
+        assert_expected_args(
             &cmd,
             &[
                 ExpectedArg {
@@ -2072,6 +2155,26 @@ None documented.
                 },
                 ExpectedArg {
                     arg: Arg {
+                        short: Some("-Z".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "set SELinux security context",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--context".to_string()),
+                        value_name: Some("CTX".to_string()),
+                        num_args: Some("?".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "like -Z, or if CTX is specified then set the SELinux",
+                },
+                ExpectedArg {
+                    arg: Arg {
                         short: None,
                         long: Some("--help".to_string()),
                         value_name: None,
@@ -2079,6 +2182,16 @@ None documented.
                         ..Default::default()
                     },
                     description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
                 },
             ],
         );
@@ -2088,9 +2201,19 @@ None documented.
     fn parses_real_mv_fixture() {
         let cmd = parse_test_manpage("mv.1");
         assert_expected_subcommands(&cmd, &[]);
-        assert_contains_expected_args(
+        assert_expected_args(
             &cmd,
             &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--backup".to_string()),
+                        value_name: Some("CONTROL".to_string()),
+                        num_args: Some("?".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "make a backup of each existing destination file",
+                },
                 ExpectedArg {
                     arg: Arg {
                         short: Some("-b".to_string()),
@@ -2103,6 +2226,16 @@ None documented.
                 },
                 ExpectedArg {
                     arg: Arg {
+                        short: None,
+                        long: Some("--debug".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "explain how a file is copied",
+                },
+                ExpectedArg {
+                    arg: Arg {
                         short: Some("-f".to_string()),
                         long: Some("--force".to_string()),
                         value_name: None,
@@ -2110,6 +2243,46 @@ None documented.
                         ..Default::default()
                     },
                     description_contains: "do not prompt before overwriting",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-i".to_string()),
+                        long: Some("--interactive".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "prompt before overwrite",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-n".to_string()),
+                        long: Some("--no-clobber".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "do not overwrite an existing file",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--no-copy".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "do not copy if renaming fails",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--strip-trailing-slashes".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "remove any trailing slashes from each SOURCE",
                 },
                 ExpectedArg {
                     arg: Arg {
@@ -2127,10 +2300,85 @@ None documented.
                         long: Some("--target-directory".to_string()),
                         value_name: Some("DIRECTORY".to_string()),
                         num_args: Some("1".to_string()),
-                        value_hint: crate::ValueHint::DirPath,
+                        value_hint: ValueHint::DirPath,
                         ..Default::default()
                     },
                     description_contains: "move all SOURCE arguments into DIRECTORY",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-T".to_string()),
+                        long: Some("--no-target-directory".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "treat DEST as a normal file",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--update".to_string()),
+                        value_name: Some("UPDATE".to_string()),
+                        num_args: Some("?".to_string()),
+                        value_enum: Some(vec![
+                            "all".to_string(),
+                            "none".to_string(),
+                            "older".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "control which existing files are updated",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-u".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "equivalent to --update",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: Some("--verbose".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "explain what is being done",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-Z".to_string()),
+                        long: Some("--context".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "set SELinux security context of destination",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
                 },
             ],
         );
@@ -3583,6 +3831,26 @@ Use asynchronous IO.
                         description: None,
                     },
                     description_contains: "leading slashes",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--quoting-style".to_string()),
+                        value_name: Some("STYLE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "literal".to_string(),
+                            "shell".to_string(),
+                            "shell-always".to_string(),
+                            "c".to_string(),
+                            "c-maybe".to_string(),
+                            "escape".to_string(),
+                            "locale".to_string(),
+                            "clocale".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "quoting style for file and member names",
                 },
             ],
         );

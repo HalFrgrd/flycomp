@@ -240,19 +240,14 @@ fn split_option_line(flag_part: &str) -> (&str, Option<String>) {
     let tokens: Vec<&str> = flag_part.split_whitespace().collect();
     let mut prefix_tokens_count = 0;
     let mut seen_flag = false;
-    let mut needs_value = false;
-    let mut seen_value = false;
 
     for &t in &tokens {
         if t.starts_with('-') {
             seen_flag = true;
-            needs_value = !t.contains('=');
             prefix_tokens_count += 1;
-        } else if seen_flag && (t == "," || t == "|" || t == "/") {
+        } else if seen_flag && (t == "," || t == "|" || t == "/" || t == "or") {
             prefix_tokens_count += 1;
-        } else if seen_flag && needs_value && !seen_value && is_like_value_name(t) {
-            seen_value = true;
-            needs_value = false;
+        } else if seen_flag && is_like_value_name(t) {
             prefix_tokens_count += 1;
         } else {
             break;
@@ -448,12 +443,19 @@ fn is_valid_flag_name(name: &str) -> bool {
 
 /// Try to parse a flag token like `-v`, `--verbose`, or `--output <FILE>`.
 /// Returns `(short, long, value_name)`.
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn parse_flag_tokens(token: &str) -> (Option<String>, Option<String>, Option<String>) {
+pub(crate) fn parse_flag_tokens(
+    token: &str,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
     // Split on commas / whitespace to handle "-v, --verbose <FILE>"
     let mut short = None;
     let mut long = None;
     let mut value_name = None;
+    let mut num_args = None;
 
     // Tokenise: split on ", " first, then whitespace
     let pieces: Vec<&str> = token.split_whitespace().collect();
@@ -468,6 +470,7 @@ pub(crate) fn parse_flag_tokens(token: &str) -> (Option<String>, Option<String>,
                         let val = &piece_str[start_bracket + 2..end_bracket];
                         value_name = Some(val.trim_matches(|c| c == '<' || c == '>').to_string());
                         piece_str.drain(start_bracket..=end_bracket);
+                        num_args = Some("?".to_string());
                     }
                 }
             }
@@ -518,6 +521,7 @@ pub(crate) fn parse_flag_tokens(token: &str) -> (Option<String>, Option<String>,
                                 }
                                 short_candidate = base.to_string();
                                 is_bracketed_short = true;
+                                num_args = Some("?".to_string());
                             }
                         }
                     }
@@ -570,7 +574,40 @@ pub(crate) fn parse_flag_tokens(token: &str) -> (Option<String>, Option<String>,
         }
     }
 
-    (short, long, value_name)
+    if num_args.is_none() {
+        let mut num_values = 0;
+        let mut seen_any_flag = false;
+        for &piece in &pieces {
+            if piece.starts_with('-') {
+                seen_any_flag = true;
+                num_values = 0;
+            } else if seen_any_flag && is_like_value_name(piece) {
+                num_values += 1;
+            } else if seen_any_flag
+                && (piece == "," || piece == "|" || piece == "/" || piece == "or")
+            {
+                // separator
+            } else {
+                if seen_any_flag {
+                    break;
+                }
+            }
+        }
+        if num_values > 0 {
+            let first_val = pieces.iter().filter(|&p| is_like_value_name(p)).next();
+            if num_values == 1
+                && first_val.map_or(false, |p| p.starts_with('[') && p.ends_with(']'))
+            {
+                num_args = Some("?".to_string());
+            } else {
+                num_args = Some(num_values.to_string());
+            }
+        } else if value_name.is_some() {
+            num_args = Some("1".to_string());
+        }
+    }
+
+    (short, long, value_name, num_args)
 }
 
 fn detect_description_column(lines: &[&str]) -> Option<usize> {
@@ -603,7 +640,7 @@ fn is_flag_declaration_line(line: &str) -> bool {
         return false;
     }
     let (token_part, _) = split_option_line(trimmed);
-    let (short, long, _) = parse_flag_tokens(token_part);
+    let (short, long, _, _) = parse_flag_tokens(token_part);
     short.is_some() || long.is_some()
 }
 
@@ -959,7 +996,7 @@ pub fn parse_help_clap(help: &str) -> Command {
                 }
 
                 let (token_part, inline_desc) = split_option_line(flag_part);
-                let (short, long, value_name) = parse_flag_tokens(token_part);
+                let (short, long, value_name, num_args) = parse_flag_tokens(token_part);
 
                 if short.is_some() || long.is_some() || flag_part.starts_with('[') {
                     let (cont_desc, next_i) =
@@ -980,12 +1017,6 @@ pub fn parse_help_clap(help: &str) -> Command {
                             None => bracketed_part.to_string(),
                         });
                     }
-
-                    let num_args = if value_name.is_some() {
-                        Some("1".to_string())
-                    } else {
-                        None
-                    };
 
                     cmd.args.push(Arg {
                         short,
@@ -1068,11 +1099,11 @@ pub fn parse_help_argparse(help: &str) -> Command {
                 let flag_part = line.trim();
 
                 let (token_part, inline_desc) = split_option_line(flag_part);
-                let (short, long, value_name) = if flag_part.starts_with('-') {
+                let (short, long, value_name, num_args) = if flag_part.starts_with('-') {
                     parse_flag_tokens(token_part)
                 } else {
                     let name_token = token_part.split_whitespace().next().unwrap_or("");
-                    (None, Some(name_token.to_string()), None)
+                    (None, Some(name_token.to_string()), None, None)
                 };
 
                 if short.is_some() || long.is_some() || !flag_part.starts_with('-') {
@@ -1094,12 +1125,6 @@ pub fn parse_help_argparse(help: &str) -> Command {
                             None => bracketed_part.to_string(),
                         });
                     }
-
-                    let num_args = if value_name.is_some() {
-                        Some("1".to_string())
-                    } else {
-                        None
-                    };
 
                     cmd.args.push(Arg {
                         short,
@@ -1158,7 +1183,7 @@ pub fn parse_help_generic(help: &str) -> Command {
         if flag_part.starts_with('-') {
             let flag_indent = indent_of(line);
             let (token_part, inline_desc) = split_option_line(flag_part);
-            let (short, long, value_name) = parse_flag_tokens(token_part);
+            let (short, long, value_name, num_args) = parse_flag_tokens(token_part);
 
             if short.is_some() || long.is_some() {
                 let (cont_desc, next_i) =
@@ -1179,12 +1204,6 @@ pub fn parse_help_generic(help: &str) -> Command {
                         None => bracketed_part.to_string(),
                     });
                 }
-
-                let num_args = if value_name.is_some() {
-                    Some("1".to_string())
-                } else {
-                    None
-                };
 
                 cmd.args.push(Arg {
                     short,
@@ -1286,7 +1305,7 @@ mod tests {
                     arg: Arg {
                         long: Some("--show-animations".to_string()),
                         value_name: Some("SHOW_ANIMATIONS".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         value_enum: Some(vec!["true".to_string(), "false".to_string()]),
                         ..Default::default()
                     },
@@ -1296,7 +1315,7 @@ mod tests {
                     arg: Arg {
                         long: Some("--show-inline-history".to_string()),
                         value_name: Some("SHOW_INLINE_HISTORY".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         value_enum: Some(vec!["true".to_string(), "false".to_string()]),
                         ..Default::default()
                     },
@@ -1306,7 +1325,7 @@ mod tests {
                     arg: Arg {
                         long: Some("--auto-close-chars".to_string()),
                         value_name: Some("AUTO_CLOSE_CHARS".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         value_enum: Some(vec!["true".to_string(), "false".to_string()]),
                         ..Default::default()
                     },
@@ -1316,7 +1335,7 @@ mod tests {
                     arg: Arg {
                         long: Some("--enable-extended-key-codes".to_string()),
                         value_name: Some("ENABLE_EXTENDED_KEY_CODES".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         value_enum: Some(vec!["true".to_string(), "false".to_string()]),
                         ..Default::default()
                     },
@@ -2372,7 +2391,7 @@ mod tests {
                         value_name: Some(
                             "[default|locale|escape|hex|highlight|invalid]".to_string(),
                         ),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         value_enum: Some(vec![
                             "default".to_string(),
                             "locale".to_string(),
@@ -2391,12 +2410,13 @@ mod tests {
 
     #[test]
     fn test_parse_flag_tokens_ignores_multi_character_short_forms() {
-        let (short, long, value_name) = parse_flag_tokens("-wk --debug-dump=links");
+        let (short, long, value_name, num_args) = parse_flag_tokens("-wk --debug-dump=links");
         assert_eq!(short, None);
         assert_eq!(long.as_deref(), Some("--debug-dump"));
         assert_eq!(value_name.as_deref(), Some("links"));
+        assert_eq!(num_args.as_deref(), Some("1"));
 
-        let (short, long, value_name) =
+        let (short, long, value_name, num_args) =
             parse_flag_tokens("-U[dlexhi] --unicode=[default|locale|escape|hex|highlight|invalid]");
         assert_eq!(short, Some("-U".to_string()));
         assert_eq!(long.as_deref(), Some("--unicode"));
@@ -2404,6 +2424,7 @@ mod tests {
             value_name.as_deref(),
             Some("[default|locale|escape|hex|highlight|invalid]")
         );
+        assert_eq!(num_args.as_deref(), Some("?"));
     }
     #[test]
     fn test_zstd_help() {
@@ -3314,7 +3335,7 @@ Commands:
                         short: Some("-u".to_string()),
                         long: Some("--untracked-files".to_string()),
                         value_name: Some("mode".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         ..Default::default()
                     },
                     description_contains: "show untracked files",
@@ -3883,7 +3904,7 @@ Commands:
                         short: None,
                         long: Some("--output".to_string()),
                         value_name: Some("FIELD_LIST".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         ..Default::default()
                     },
                     description_contains: "use the output format defined by FIELD_LIST",
@@ -4269,7 +4290,7 @@ Commands:
                         short: Some("-e".to_string()),
                         long: Some("--eof".to_string()),
                         value_name: Some("END".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         ..Default::default()
                     },
                     description_contains: "equivalent to -E END",
@@ -4289,7 +4310,7 @@ Commands:
                         short: Some("-i".to_string()),
                         long: Some("--replace".to_string()),
                         value_name: Some("R".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         ..Default::default()
                     },
                     description_contains: "replace R in INITIAL-ARGS",
@@ -4309,7 +4330,7 @@ Commands:
                         short: Some("-l".to_string()),
                         long: None,
                         value_name: Some("MAX-LINES".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         ..Default::default()
                     },
                     description_contains: "similar to -L but defaults",
@@ -4536,7 +4557,7 @@ Commands:
                         short: None,
                         long: Some("--tmux".to_string()),
                         value_name: Some("OPTS".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         value_enum: Some(vec![
                             "center".to_string(),
                             "top".to_string(),
@@ -4553,7 +4574,7 @@ Commands:
                         short: None,
                         long: Some("--border".to_string()),
                         value_name: Some("STYLE".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         value_enum: Some(vec![
                             "rounded".to_string(),
                             "sharp".to_string(),
@@ -4601,7 +4622,7 @@ Commands:
                         short: Some("-m".to_string()),
                         long: Some("--multi".to_string()),
                         value_name: Some("MAX".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         ..Default::default()
                     },
                     description_contains: "Enable multi-select",
@@ -4652,7 +4673,7 @@ Commands:
                         short: None,
                         long: Some("--list-border".to_string()),
                         value_name: Some("STYLE".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         value_enum: Some(vec![
                             "rounded".to_string(),
                             "sharp".to_string(),
@@ -4742,7 +4763,7 @@ Commands:
                         short: None,
                         long: Some("--walker-root".to_string()),
                         value_name: Some("DIR".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         value_hint: ValueHint::DirPath,
                         ..Default::default()
                     },
@@ -4903,7 +4924,7 @@ Commands:
                         short: None,
                         long: Some("--backup".to_string()),
                         value_name: Some("CONTROL".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         ..Default::default()
                     },
                     description_contains: "make a backup of each existing destination file",
@@ -5096,7 +5117,7 @@ Commands:
                         short: None,
                         long: Some("--block-signal".to_string()),
                         value_name: Some("SIG".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         ..Default::default()
                     },
                     description_contains: "block delivery of SIG",
@@ -5106,7 +5127,7 @@ Commands:
                         short: None,
                         long: Some("--default-signal".to_string()),
                         value_name: Some("SIG".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         ..Default::default()
                     },
                     description_contains: "reset handling of SIG",
@@ -5116,7 +5137,7 @@ Commands:
                         short: None,
                         long: Some("--ignore-signal".to_string()),
                         value_name: Some("SIG".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("?".to_string()),
                         ..Default::default()
                     },
                     description_contains: "set handling of SIG",
@@ -5555,7 +5576,7 @@ OPTIONS:
                         short: Some("-P".to_string()),
                         long: Some("--parameter-scan".to_string()),
                         value_name: Some("VAR".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("3".to_string()),
                         ..Default::default()
                     },
                     description_contains: "Perform benchmark runs",
@@ -5575,7 +5596,7 @@ OPTIONS:
                         short: Some("-L".to_string()),
                         long: Some("--parameter-list".to_string()),
                         value_name: Some("VAR".to_string()),
-                        num_args: Some("1".to_string()),
+                        num_args: Some("2".to_string()),
                         ..Default::default()
                     },
                     description_contains: "comma-separated list",

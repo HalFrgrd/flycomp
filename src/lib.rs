@@ -768,10 +768,39 @@ pub fn parse_possible_values(
         if let Some(list_vals) = parse_bulleted_list_values(desc) {
             return Some(list_vals);
         }
+
+        // Try to parse brace-enclosed choices like {all,none,older(default)}
+        static RE_BRACES: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+        let re_braces = RE_BRACES.get_or_init(|| {
+            regex::Regex::new(r"\{([a-zA-Z0-9_\-]+(?:\([a-zA-Z0-9_\-]+\))?(?:\s*,\s*[a-zA-Z0-9_\-]+(?:\([a-zA-Z0-9_\-]+\))?)+)\}").unwrap()
+        });
+        if let Some(caps) = re_braces.captures(desc) {
+            let inner = caps.get(1).unwrap().as_str();
+            let mut values = Vec::new();
+            for part in inner.split(',') {
+                let mut clean = part.trim();
+                if let Some(idx) = clean.find('(') {
+                    clean = &clean[..idx];
+                }
+                let clean = clean.trim();
+                if !clean.is_empty()
+                    && clean
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+                {
+                    if !(clean.starts_with('-') && clean.chars().any(|c| c.is_alphabetic())) {
+                        values.push(clean.to_string());
+                    }
+                }
+            }
+            if values.len() >= 2 {
+                return Some(values);
+            }
+        }
         // regex to find the prefix
         let re_prefix = RE_PREFIX.get_or_init(|| {
             regex::Regex::new(
-                r"(?i)\b(?:possible\s+values|choices|allowed\s+values|valid\s+values|one\s+of|accepts|can\s+be|selected\s+from)\s*(?:=|:|\bare\b)?\s*|\bmust\s+be\s+(?:either\s+|one\s+of\s+)?(?:=|:)?\s*"
+                r"(?i)\b(?:possible\s+values|choices|allowed\s+values|valid\s+values|one\s+of|accepts|can\s+be|selected\s+from)\s*(?:for\s+(?:[a-zA-Z0-9_-]+\s+){1,2})?(?:=|:|\bare\b|\bis\b)?\s*|\bmust\s+be\s+(?:either\s+|one\s+of\s+)?(?:=|:)?\s*"
             ).unwrap()
         });
 
@@ -832,7 +861,9 @@ pub fn parse_possible_values(
                         .chars()
                         .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
                 {
-                    values.push(clean.to_string());
+                    if !(clean.starts_with('-') && clean.chars().any(|c| c.is_alphabetic())) {
+                        values.push(clean.to_string());
+                    }
                 }
             }
 
@@ -891,10 +922,21 @@ pub fn parse_possible_values(
                     continue;
                 }
 
-                let token_sep = TOKEN_SEP.get_or_init(|| {
-                    regex::Regex::new(r"\s*(?:,\s*(?:or|and)?|\s+(?:or|and)\s+|\||/)\s*").unwrap()
-                });
-                let raw_tokens: Vec<&str> = token_sep.split(clause).collect();
+                let has_path = has_path_slash(clause);
+                let raw_tokens: Vec<&str> = if has_path {
+                    static TOKEN_SEP_NO_SLASH: std::sync::OnceLock<regex::Regex> =
+                        std::sync::OnceLock::new();
+                    let sep = TOKEN_SEP_NO_SLASH.get_or_init(|| {
+                        regex::Regex::new(r"\s*(?:,\s*(?:or|and)?|\s+(?:or|and)\s+|\|)\s*").unwrap()
+                    });
+                    sep.split(clause).collect()
+                } else {
+                    let token_sep = TOKEN_SEP.get_or_init(|| {
+                        regex::Regex::new(r"\s*(?:,\s*(?:or|and)?|\s+(?:or|and)\s+|\||/)\s*")
+                            .unwrap()
+                    });
+                    token_sep.split(clause).collect()
+                };
 
                 if raw_tokens.len() >= 2 {
                     let mut values = Vec::new();
@@ -2459,9 +2501,12 @@ Options:
     #[test]
     fn test_run_help_fallback_to_help() {
         use std::io::Write;
+        static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let id = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let folder_name = format!("test_run_help_fallback_{id}_{}", std::process::id());
         let temp_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("target")
-            .join("test_run_help_fallback");
+            .join(&folder_name);
         std::fs::create_dir_all(&temp_dir).unwrap();
         let cmd_path = temp_dir.join("fallback_cmd");
 
@@ -2724,6 +2769,17 @@ fi
         assert_eq!(
             parse_possible_values(None, Some("choices: yes/no")),
             Some(vec!["yes".to_string(), "no".to_string()])
+        );
+        assert_eq!(
+            parse_possible_values(
+                None,
+                Some("Valid values for STYLE are literal, shell, shell-always")
+            ),
+            Some(vec![
+                "literal".to_string(),
+                "shell".to_string(),
+                "shell-always".to_string()
+            ])
         );
     }
 
