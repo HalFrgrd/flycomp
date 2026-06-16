@@ -1320,6 +1320,7 @@ fn parse_manpage_recursive_impl<F>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ValueHint;
     use std::fs;
 
     const TYPE1_FIXTURE: &str = r#".TH EXAMPLE 1
@@ -4545,6 +4546,312 @@ Use asynchronous IO.
                         ..Default::default()
                     },
                     description_contains: "output version information and exit",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn parses_real_hyperfine_fixture() {
+        let cmd = parse_test_manpage("hyperfine.1");
+        assert_eq!(
+            cmd.description.as_deref(),
+            Some("command-line benchmarking tool")
+        );
+        assert_expected_subcommands(&cmd, &[]);
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-w".to_string()),
+                        long: Some("--warmup".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Perform NUM warmup runs before the actual benchmark",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-m".to_string()),
+                        long: Some("--min-runs".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Perform at least NUM runs for each command",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-M".to_string()),
+                        long: Some("--max-runs".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Perform at most NUM runs for each command",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: Some("--runs".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Perform exactly NUM runs for each command",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-s".to_string()),
+                        long: Some("--setup".to_string()),
+                        value_name: Some("CMD".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::CommandName,
+                        ..Default::default()
+                    },
+                    description_contains: "Execute CMD once before each set of timing runs",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-p".to_string()),
+                        long: Some("--prepare".to_string()),
+                        value_name: Some("CMD".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::CommandName,
+                        ..Default::default()
+                    },
+                    description_contains: "Execute CMD before each timing run",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--conclude".to_string()),
+                        value_name: Some("CMD".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::CommandName,
+                        ..Default::default()
+                    },
+                    description_contains: "Execute CMD after each timing run",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-c".to_string()),
+                        long: Some("--cleanup".to_string()),
+                        value_name: Some("CMD".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::CommandName,
+                        ..Default::default()
+                    },
+                    description_contains: "Execute CMD after the completion of all benchmarking runs",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-P".to_string()),
+                        long: Some("--parameter-scan".to_string()),
+                        value_name: Some("VAR".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Perform benchmark runs for each value in the range MIN",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-D".to_string()),
+                        long: Some("--parameter-step-size".to_string()),
+                        value_name: Some("DELTA".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "This argument requires --parameter-scan to be specified as well",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-L".to_string()),
+                        long: Some("--parameter-list".to_string()),
+                        value_name: Some("VAR".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Perform benchmark runs for each value in the comma-separated list",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-S".to_string()),
+                        long: Some("--shell".to_string()),
+                        value_name: Some("SHELL".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::CommandString,
+                        ..Default::default()
+                    },
+                    description_contains: "Set the shell to use for executing benchmarked commands",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-N".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "An alias for '--shell=none'",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-i".to_string()),
+                        long: Some("--ignore-failure".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Ignore non-zero exit codes of the benchmarked programs",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--style".to_string()),
+                        value_name: Some("TYPE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Set output style TYPE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--sort".to_string()),
+                        value_name: Some("METHOD".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Specify the sort order of the speed comparison summary",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-u".to_string()),
+                        long: Some("--time-unit".to_string()),
+                        value_name: Some("UNIT".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "microsecond".to_string(),
+                            "millisecond".to_string(),
+                            "second".to_string(),
+                        ]),
+                        value_hint: ValueHint::SystemdUnit,
+                        ..Default::default()
+                    },
+                    description_contains: "Set the time unit to be used",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--export-asciidoc".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "Export the timing summary statistics as an AsciiDoc table",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--export-csv".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "Export the timing summary statistics as CSV to the given FILE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--export-json".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "Export the timing summary statistics and timings of individual runs as JSON",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--export-markdown".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "Export the timing summary statistics as a Markdown table",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--export-orgmode".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "Export the timing summary statistics as an Emacs org-mode table",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--show-output".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the stdout and stderr of the benchmark instead of suppressing it",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--output".to_string()),
+                        value_name: Some("WHERE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Control where the output of the benchmark is redirected",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--input".to_string()),
+                        value_name: Some("WHERE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec!["dev".to_string()]),
+                        ..Default::default()
+                    },
+                    description_contains: "Control where the input of the benchmark comes from",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-n".to_string()),
+                        long: Some("--command-name".to_string()),
+                        value_name: Some("NAME".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Give a meaningful NAME to a command",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-h".to_string()),
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print help",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-V".to_string()),
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print version",
                 },
             ],
         );

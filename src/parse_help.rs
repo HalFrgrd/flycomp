@@ -430,6 +430,22 @@ fn indent_of(line: &str) -> usize {
     line.chars().take_while(|c| *c == ' ' || *c == '\t').count()
 }
 
+fn is_valid_flag_name(name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    let stripped = name.trim_start_matches('-');
+    if stripped.is_empty() {
+        return false;
+    }
+    for c in stripped.chars() {
+        if !c.is_alphanumeric() && c != '-' && c != '_' && c != '[' && c != ']' && c != '#' {
+            return false;
+        }
+    }
+    true
+}
+
 /// Try to parse a flag token like `-v`, `--verbose`, or `--output <FILE>`.
 /// Returns `(short, long, value_name)`.
 #[cfg_attr(not(test), allow(dead_code))]
@@ -542,6 +558,18 @@ pub(crate) fn parse_flag_tokens(token: &str) -> (Option<String>, Option<String>,
             }
         }
     }
+
+    if let Some(ref s) = short {
+        if !is_valid_flag_name(s) {
+            short = None;
+        }
+    }
+    if let Some(ref l) = long {
+        if !is_valid_flag_name(l) {
+            long = None;
+        }
+    }
+
     (short, long, value_name)
 }
 
@@ -567,6 +595,16 @@ fn detect_description_column(lines: &[&str]) -> Option<usize> {
         .into_iter()
         .max_by_key(|&(_, count)| count)
         .map(|(col, _)| col)
+}
+
+fn is_flag_declaration_line(line: &str) -> bool {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('-') {
+        return false;
+    }
+    let (token_part, _) = split_option_line(trimmed);
+    let (short, long, _) = parse_flag_tokens(token_part);
+    short.is_some() || long.is_some()
 }
 
 /// Collect continuation lines: lines whose indent > `base_indent` (or blank).
@@ -596,7 +634,7 @@ fn collect_continuation<'a>(
                 } else {
                     ind > base_indent
                 };
-                if is_aligned && !next_line.trim().starts_with('-') {
+                if is_aligned && !is_flag_declaration_line(next_line) {
                     next_is_continuation = true;
                 }
                 break;
@@ -620,7 +658,7 @@ fn collect_continuation<'a>(
         // A deeper-indented line that starts with `-` is another flag entry,
         // not description text. This handles tools like cargo that mix indent
         // levels within a single Options section.
-        if line.trim().starts_with('-') {
+        if is_flag_declaration_line(line) {
             break;
         }
         desc_parts.push(line.trim().to_string());
@@ -635,10 +673,10 @@ pub fn parse_help_clap(help: &str) -> Command {
     let desc_col = detect_description_column(&lines);
     let mut cmd = Command::default();
 
-    if let Some(usage_pos) = lines.iter().position(|l| {
-        let t = l.trim_start();
-        t.starts_with("Usage:") || t.starts_with("usage:")
-    }) {
+    if let Some(usage_pos) = lines
+        .iter()
+        .position(|l| l.trim_start().to_lowercase().starts_with("usage:"))
+    {
         let mut full_usage = lines[usage_pos].trim_start().to_string();
         let mut j = usage_pos + 1;
         while j < lines.len() && !lines[j].trim().is_empty() && indent_of(lines[j]) > 0 {
@@ -647,9 +685,7 @@ pub fn parse_help_clap(help: &str) -> Command {
             j += 1;
         }
 
-        let after = if full_usage.starts_with("Usage:") {
-            &full_usage["Usage:".len()..]
-        } else if full_usage.starts_with("usage:") {
+        let after = if full_usage.to_lowercase().starts_with("usage:") {
             &full_usage["usage:".len()..]
         } else {
             &full_usage
@@ -672,10 +708,7 @@ pub fn parse_help_clap(help: &str) -> Command {
 
     let usage_pos = lines
         .iter()
-        .position(|l| {
-            let t = l.trim_start();
-            t.starts_with("Usage:") || t.starts_with("usage:")
-        })
+        .position(|l| l.trim_start().to_lowercase().starts_with("usage:"))
         .unwrap_or(0);
     for line in &lines[..usage_pos] {
         let t = line.trim();
@@ -928,39 +961,43 @@ pub fn parse_help_clap(help: &str) -> Command {
                 let (token_part, inline_desc) = split_option_line(flag_part);
                 let (short, long, value_name) = parse_flag_tokens(token_part);
 
-                let (cont_desc, next_i) =
-                    collect_continuation(&lines, i + 1, flag_indent, desc_col);
-                i = next_i;
+                if short.is_some() || long.is_some() || flag_part.starts_with('[') {
+                    let (cont_desc, next_i) =
+                        collect_continuation(&lines, i + 1, flag_indent, desc_col);
+                    i = next_i;
 
-                let mut description = match (inline_desc, cont_desc.as_str()) {
-                    (Some(d), "") => Some(d),
-                    (None, d) if !d.is_empty() => Some(d.to_string()),
-                    (Some(d), rest) => Some(format!("{} {}", d, rest)),
-                    (None, _) => None,
-                };
+                    let mut description = match (inline_desc, cont_desc.as_str()) {
+                        (Some(d), "") => Some(d),
+                        (None, d) if !d.is_empty() => Some(d.to_string()),
+                        (Some(d), rest) => Some(format!("{} {}", d, rest)),
+                        (None, _) => None,
+                    };
 
-                if let Some(bracket_idx) = token_part.find('[') {
-                    let bracketed_part = &token_part[bracket_idx..];
-                    description = Some(match description {
-                        Some(desc) => format!("{} {}", bracketed_part, desc),
-                        None => bracketed_part.to_string(),
+                    if let Some(bracket_idx) = token_part.find('[') {
+                        let bracketed_part = &token_part[bracket_idx..];
+                        description = Some(match description {
+                            Some(desc) => format!("{} {}", bracketed_part, desc),
+                            None => bracketed_part.to_string(),
+                        });
+                    }
+
+                    let num_args = if value_name.is_some() {
+                        Some("1".to_string())
+                    } else {
+                        None
+                    };
+
+                    cmd.args.push(Arg {
+                        short,
+                        long,
+                        description,
+                        value_name,
+                        num_args,
+                        ..Default::default()
                     });
-                }
-
-                let num_args = if value_name.is_some() {
-                    Some("1".to_string())
                 } else {
-                    None
-                };
-
-                cmd.args.push(Arg {
-                    short,
-                    long,
-                    description,
-                    value_name,
-                    num_args,
-                    ..Default::default()
-                });
+                    i += 1;
+                }
             }
             continue;
         }
@@ -1038,39 +1075,43 @@ pub fn parse_help_argparse(help: &str) -> Command {
                     (None, Some(name_token.to_string()), None)
                 };
 
-                let (cont_desc, next_i) =
-                    collect_continuation(&lines, i + 1, flag_indent, desc_col);
-                i = next_i;
+                if short.is_some() || long.is_some() || !flag_part.starts_with('-') {
+                    let (cont_desc, next_i) =
+                        collect_continuation(&lines, i + 1, flag_indent, desc_col);
+                    i = next_i;
 
-                let mut description = match (inline_desc, cont_desc.as_str()) {
-                    (Some(d), "") => Some(d),
-                    (None, d) if !d.is_empty() => Some(d.to_string()),
-                    (Some(d), rest) => Some(format!("{} {}", d, rest)),
-                    (None, _) => None,
-                };
+                    let mut description = match (inline_desc, cont_desc.as_str()) {
+                        (Some(d), "") => Some(d),
+                        (None, d) if !d.is_empty() => Some(d.to_string()),
+                        (Some(d), rest) => Some(format!("{} {}", d, rest)),
+                        (None, _) => None,
+                    };
 
-                if let Some(bracket_idx) = token_part.find('[') {
-                    let bracketed_part = &token_part[bracket_idx..];
-                    description = Some(match description {
-                        Some(desc) => format!("{} {}", bracketed_part, desc),
-                        None => bracketed_part.to_string(),
+                    if let Some(bracket_idx) = token_part.find('[') {
+                        let bracketed_part = &token_part[bracket_idx..];
+                        description = Some(match description {
+                            Some(desc) => format!("{} {}", bracketed_part, desc),
+                            None => bracketed_part.to_string(),
+                        });
+                    }
+
+                    let num_args = if value_name.is_some() {
+                        Some("1".to_string())
+                    } else {
+                        None
+                    };
+
+                    cmd.args.push(Arg {
+                        short,
+                        long,
+                        description,
+                        value_name,
+                        num_args,
+                        ..Default::default()
                     });
-                }
-
-                let num_args = if value_name.is_some() {
-                    Some("1".to_string())
                 } else {
-                    None
-                };
-
-                cmd.args.push(Arg {
-                    short,
-                    long,
-                    description,
-                    value_name,
-                    num_args,
-                    ..Default::default()
-                });
+                    i += 1;
+                }
             }
             continue;
         }
@@ -1119,39 +1160,42 @@ pub fn parse_help_generic(help: &str) -> Command {
             let (token_part, inline_desc) = split_option_line(flag_part);
             let (short, long, value_name) = parse_flag_tokens(token_part);
 
-            let (cont_desc, next_i) = collect_continuation(&lines, i + 1, flag_indent, desc_col);
-            i = next_i;
+            if short.is_some() || long.is_some() {
+                let (cont_desc, next_i) =
+                    collect_continuation(&lines, i + 1, flag_indent, desc_col);
+                i = next_i;
 
-            let mut description = match (inline_desc, cont_desc.as_str()) {
-                (Some(d), "") => Some(d),
-                (None, d) if !d.is_empty() => Some(d.to_string()),
-                (Some(d), rest) => Some(format!("{} {}", d, rest)),
-                (None, _) => None,
-            };
+                let mut description = match (inline_desc, cont_desc.as_str()) {
+                    (Some(d), "") => Some(d),
+                    (None, d) if !d.is_empty() => Some(d.to_string()),
+                    (Some(d), rest) => Some(format!("{} {}", d, rest)),
+                    (None, _) => None,
+                };
 
-            if let Some(bracket_idx) = token_part.find('[') {
-                let bracketed_part = &token_part[bracket_idx..];
-                description = Some(match description {
-                    Some(desc) => format!("{} {}", bracketed_part, desc),
-                    None => bracketed_part.to_string(),
+                if let Some(bracket_idx) = token_part.find('[') {
+                    let bracketed_part = &token_part[bracket_idx..];
+                    description = Some(match description {
+                        Some(desc) => format!("{} {}", bracketed_part, desc),
+                        None => bracketed_part.to_string(),
+                    });
+                }
+
+                let num_args = if value_name.is_some() {
+                    Some("1".to_string())
+                } else {
+                    None
+                };
+
+                cmd.args.push(Arg {
+                    short,
+                    long,
+                    description,
+                    value_name,
+                    num_args,
+                    ..Default::default()
                 });
+                continue;
             }
-
-            let num_args = if value_name.is_some() {
-                Some("1".to_string())
-            } else {
-                None
-            };
-
-            cmd.args.push(Arg {
-                short,
-                long,
-                description,
-                value_name,
-                num_args,
-                ..Default::default()
-            });
-            continue;
         }
 
         i += 1;
@@ -5398,6 +5442,292 @@ Commands:
                         ..Default::default()
                     },
                     description_contains: "output version information and exit",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn test_hyperfine_norc_description_is_not_parsed_as_flag() {
+        let help_text = r#"
+USAGE:
+    hyperfine [OPTIONS] <command>...
+
+OPTIONS:
+    -S, --shell <SHELL>
+            Set the shell to use. This can be a full command line
+            like "bash --norc". It can also be set to "default".
+"#;
+        let cmd = parse_help(help_text);
+        assert_eq!(cmd.args.len(), 1);
+        let arg = &cmd.args[0];
+        assert_eq!(arg.long.as_deref(), Some("--shell"));
+        assert_eq!(arg.short.as_deref(), Some("-S"));
+        assert!(arg.description.as_deref().unwrap().contains("--norc"));
+    }
+
+    #[test]
+    fn test_hyperfine_help() {
+        let cmd = parse_test_help("hyperfine");
+        assert_eq!(cmd.name.as_deref(), Some("hyperfine"));
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-w".to_string()),
+                        long: Some("--warmup".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "warmup runs",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-m".to_string()),
+                        long: Some("--min-runs".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "at least NUM runs",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-M".to_string()),
+                        long: Some("--max-runs".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "at most NUM runs",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: Some("--runs".to_string()),
+                        value_name: Some("NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "exactly NUM runs",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-s".to_string()),
+                        long: Some("--setup".to_string()),
+                        value_name: Some("CMD".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::CommandName,
+                        ..Default::default()
+                    },
+                    description_contains: "Execute CMD before each set of timing runs",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-p".to_string()),
+                        long: Some("--prepare".to_string()),
+                        value_name: Some("CMD".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::CommandName,
+                        ..Default::default()
+                    },
+                    description_contains: "Execute CMD before each timing run",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-c".to_string()),
+                        long: Some("--cleanup".to_string()),
+                        value_name: Some("CMD".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::CommandName,
+                        ..Default::default()
+                    },
+                    description_contains: "Execute CMD after the completion",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-P".to_string()),
+                        long: Some("--parameter-scan".to_string()),
+                        value_name: Some("VAR".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Perform benchmark runs",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-D".to_string()),
+                        long: Some("--parameter-step-size".to_string()),
+                        value_name: Some("DELTA".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "requires --parameter-scan",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-L".to_string()),
+                        long: Some("--parameter-list".to_string()),
+                        value_name: Some("VAR".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "comma-separated list",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--style".to_string()),
+                        value_name: Some("TYPE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Set output style type",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-S".to_string()),
+                        long: Some("--shell".to_string()),
+                        value_name: Some("SHELL".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::CommandString,
+                        ..Default::default()
+                    },
+                    description_contains: "Set the shell to use",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-N".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "alias for '--shell=none'",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-i".to_string()),
+                        long: Some("--ignore-failure".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Ignore non-zero exit codes",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-u".to_string()),
+                        long: Some("--time-unit".to_string()),
+                        value_name: Some("UNIT".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec!["millisecond".to_string(), "second".to_string()]),
+                        value_hint: ValueHint::SystemdUnit,
+                        ..Default::default()
+                    },
+                    description_contains: "Set the time unit to be used",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--export-asciidoc".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "Export the timing summary statistics as an AsciiDoc table",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--export-csv".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "Export the timing summary statistics as CSV",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--export-json".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "Export the timing summary statistics and timings of individual runs as JSON",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--export-markdown".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "Export the timing summary statistics as a Markdown table",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--export-orgmode".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "Export the timing summary statistics as a Emacs org-mode table",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--show-output".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the stdout and stderr",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--output".to_string()),
+                        value_name: Some("WHERE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec!["dev".to_string()]),
+                        ..Default::default()
+                    },
+                    description_contains: "Control where the output of the benchmark is redirected",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-n".to_string()),
+                        long: Some("--command-name".to_string()),
+                        value_name: Some("NAME".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Give a meaningful name to a command",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-h".to_string()),
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print help",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-V".to_string()),
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "version information",
                 },
             ],
         );
