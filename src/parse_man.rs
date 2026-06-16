@@ -230,9 +230,13 @@ fn normalize_value_token(token: &str) -> Option<String> {
     if token.is_empty() {
         return None;
     }
-    let token = token.trim_matches(|ch| matches!(ch, '[' | ']'));
-    let token = token.trim();
-    if token.is_empty() || token.starts_with('-') {
+    let candidate = token.trim_matches(|ch| matches!(ch, '[' | ']')).trim();
+    let token = if candidate.starts_with('-') {
+        token
+    } else {
+        candidate
+    };
+    if token.is_empty() || (token.starts_with('-') && !token.starts_with('[')) {
         return None;
     }
     Some(token.to_string())
@@ -3832,6 +3836,659 @@ Use asynchronous IO.
                 },
                 description_contains: "Recursively copy directories",
             }],
+        );
+    }
+
+    #[test]
+    fn parses_real_wc_fixture() {
+        let cmd = parse_test_manpage("wc.1");
+        assert_expected_subcommands(&cmd, &[]);
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-c".to_string()),
+                        long: Some("--bytes".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the byte counts",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-m".to_string()),
+                        long: Some("--chars".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the character counts",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-l".to_string()),
+                        long: Some("--lines".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the newline counts",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--files0-from".to_string()),
+                        value_name: Some("F".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "read input from the files specified by NUL-terminated names",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-L".to_string()),
+                        long: Some("--max-line-length".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the maximum display width",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-w".to_string()),
+                        long: Some("--words".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the word counts",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--total".to_string()),
+                        value_name: Some("WHEN".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "auto".to_string(),
+                            "always".to_string(),
+                            "only".to_string(),
+                            "never".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "when to print a line with total counts",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn parses_real_ln_fixture() {
+        let cmd = parse_test_manpage("ln.1");
+        assert_expected_subcommands(&cmd, &[]);
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--backup".to_string()),
+                        value_name: Some("CONTROL".to_string()),
+                        num_args: Some("?".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "make a backup of each existing destination file",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-b".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "like --backup but does not accept an argument",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-d".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "allow the superuser to attempt to hard link directories",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-F".to_string()),
+                        long: Some("--directory".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "allow the superuser to attempt to hard link directories",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-f".to_string()),
+                        long: Some("--force".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "remove existing destination files",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-i".to_string()),
+                        long: Some("--interactive".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "prompt whether to remove destinations",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-L".to_string()),
+                        long: Some("--logical".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "dereference TARGETs that are symbolic links",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-n".to_string()),
+                        long: Some("--no-dereference".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "treat LINK_NAME as a normal file if it is a symbolic link to a directory",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-P".to_string()),
+                        long: Some("--physical".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "make hard links directly to symbolic links",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: Some("--relative".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "with -s, create links relative to link location",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-s".to_string()),
+                        long: Some("--symbolic".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "make symbolic links instead of hard links",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-S".to_string()),
+                        long: Some("--suffix".to_string()),
+                        value_name: Some("SUFFIX".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "override the usual backup suffix",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-t".to_string()),
+                        long: Some("--target-directory".to_string()),
+                        value_name: Some("DIRECTORY".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::DirPath,
+                        ..Default::default()
+                    },
+                    description_contains: "specify the DIRECTORY in which to create the links",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-T".to_string()),
+                        long: Some("--no-target-directory".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "treat LINK_NAME as a normal file always",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: Some("--verbose".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print name of each linked file",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn parses_real_env_fixture() {
+        let cmd = parse_test_manpage("env.1");
+        assert_expected_subcommands(&cmd, &[]);
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-i".to_string()),
+                        long: Some("--ignore-environment".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "start with an empty environment",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-0".to_string()),
+                        long: Some("--null".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "end each output line with NUL",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-u".to_string()),
+                        long: Some("--unset".to_string()),
+                        value_name: Some("NAME".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "remove variable from the environment",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-C".to_string()),
+                        long: Some("--chdir".to_string()),
+                        value_name: Some("DIR".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::DirPath,
+                        ..Default::default()
+                    },
+                    description_contains: "change working directory to DIR",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-S".to_string()),
+                        long: Some("--split-string".to_string()),
+                        value_name: Some("S".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "process and split S into separate arguments",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--block-signal".to_string()),
+                        value_name: Some("SIG".to_string()),
+                        num_args: Some("?".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "block delivery of SIG",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--default-signal".to_string()),
+                        value_name: Some("SIG".to_string()),
+                        num_args: Some("?".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "reset handling of SIG",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--ignore-signal".to_string()),
+                        value_name: Some("SIG".to_string()),
+                        num_args: Some("?".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "set handling of SIG",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--list-signal-handling".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "list non default signal handling",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: Some("--debug".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print verbose information",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn parses_real_uname_fixture() {
+        let cmd = parse_test_manpage("uname.1");
+        assert_expected_subcommands(&cmd, &[]);
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-a".to_string()),
+                        long: Some("--all".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print all information",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-s".to_string()),
+                        long: Some("--kernel-name".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the kernel name",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-n".to_string()),
+                        long: Some("--nodename".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the network node hostname",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: Some("--kernel-release".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the kernel release",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: Some("--kernel-version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the kernel version",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-m".to_string()),
+                        long: Some("--machine".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the machine hardware name",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-p".to_string()),
+                        long: Some("--processor".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the processor type",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-i".to_string()),
+                        long: Some("--hardware-platform".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the hardware platform",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-o".to_string()),
+                        long: Some("--operating-system".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the operating system",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn parses_real_touch_fixture() {
+        let cmd = parse_test_manpage("touch.1");
+        assert_expected_subcommands(&cmd, &[]);
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-a".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "change only the access time",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-c".to_string()),
+                        long: Some("--no-create".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "do not create any files",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-d".to_string()),
+                        long: Some("--date".to_string()),
+                        value_name: Some("STRING".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "parse STRING and use it instead",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-f".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "(ignored)",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-h".to_string()),
+                        long: Some("--no-dereference".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "affect each symbolic link",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-m".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "change only the modification time",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: Some("--reference".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "use this file's times instead",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-t".to_string()),
+                        long: None,
+                        value_name: Some("STAMP".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "use [[CC]YY]MMDDhhmm",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--time".to_string()),
+                        value_name: Some("WORD".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "change the specified time",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn parses_real_head_fixture() {
+        let cmd = parse_test_manpage("head.1");
+        assert_expected_subcommands(&cmd, &[]);
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-c".to_string()),
+                        long: Some("--bytes".to_string()),
+                        value_name: Some("[-]NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the first NUM bytes",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-n".to_string()),
+                        long: Some("--lines".to_string()),
+                        value_name: Some("[-]NUM".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the first NUM lines",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-q".to_string()),
+                        long: Some("--quiet".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "never print headers",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--silent".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "never print headers",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: Some("--verbose".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "always print headers",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-z".to_string()),
+                        long: Some("--zero-terminated".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "line delimiter is NUL",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
+                },
+            ],
         );
     }
 }

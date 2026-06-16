@@ -1795,11 +1795,7 @@ fn run_help_attempt(
                 if stderr.contains("bwrap:") || stderr.contains("bubblewrap:") {
                     let code = status.code().unwrap_or(-1);
                     eprintln!("bubblewrap error (exit code {}): {}", code, stderr);
-                    anyhow::bail!(
-                        "bubblewrap exited with error code {}: {}",
-                        code,
-                        stderr
-                    );
+                    anyhow::bail!("bubblewrap exited with error code {}: {}", code, stderr);
                 }
             }
         }
