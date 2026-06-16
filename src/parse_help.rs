@@ -17,18 +17,25 @@ fn detect_format(help: &str) -> HelpFormat {
         return HelpFormat::Ebnf;
     }
 
-    let help_lower = help.to_lowercase();
     let has_usage = help.contains("Usage:") || help.contains("USAGE");
-    let has_commands_section = help.contains("\nCommands:\n")
-        || help.contains("\nSubcommands:\n")
-        || help_lower.contains("commands:")
-        || help_lower.contains("subcommands:")
-        || help_lower.contains("commands\n")
-        || help_lower.contains("commands:\n")
-        || help_lower.contains("common commands")
-        || help_lower.contains("available commands")
-        || help_lower.contains("frequently used commands")
-        || (help_lower.contains("common") && help_lower.contains("commands"));
+
+    let has_commands_section = help.lines().any(|l| {
+        let trimmed = l.trim();
+        let lower = trimmed.to_lowercase();
+        trimmed == "Commands:"
+            || trimmed == "Subcommands:"
+            || trimmed == "Available Commands:"
+            || (lower.contains("common") && lower.contains("commands"))
+            || lower.contains("commands used in")
+            || (lower.contains("commands")
+                && (trimmed.ends_with(':')
+                    || lower.contains("commands are")
+                    || (trimmed
+                        .chars()
+                        .all(|c| c.is_uppercase() || c.is_whitespace() || c == '-')
+                        && !trimmed.is_empty())))
+    });
+
     let has_positional = help.lines().any(|l| {
         let t = l.trim();
         t == "positional arguments:" || t == "arguments:"
@@ -38,10 +45,42 @@ fn detect_format(help: &str) -> HelpFormat {
         t == "optional arguments:" || t == "options:" || t.starts_with("named arguments:")
     });
 
+    // Check if there is any options/flags/arguments section header.
+    let has_options_header = help.lines().any(|l| {
+        let trimmed = l.trim();
+        if trimmed.is_empty() {
+            return false;
+        }
+        let is_options = (trimmed.ends_with(':')
+            || (trimmed
+                .chars()
+                .all(|c| c.is_uppercase() || c.is_whitespace() || c == '-')
+                && !trimmed.is_empty())
+            || {
+                let lower = trimmed.to_lowercase();
+                lower == "options" || lower == "flags" || lower == "arguments" || lower == "args"
+            })
+            && {
+                let lower = trimmed.to_lowercase();
+                lower.contains("options")
+                    || lower.contains("flags")
+                    || lower.contains("arguments")
+                    || lower.contains("args")
+                    || lower.contains("builder")
+                    || lower.contains("parameters")
+                    || lower.contains("settings")
+                    || lower.contains("control")
+                    || lower.contains("selection")
+                    || lower.contains("miscellaneous")
+                    || lower.contains("interpretation")
+            };
+        is_options
+    });
+
     if has_positional || (has_optional && !has_commands_section) {
         // Pure argparse output never has a "Commands:" section.
         HelpFormat::Argparse
-    } else if has_usage || has_commands_section {
+    } else if (has_usage || has_commands_section) && (has_options_header || has_commands_section) {
         HelpFormat::Clap
     } else {
         HelpFormat::Generic
@@ -450,7 +489,7 @@ pub(crate) fn parse_flag_tokens(token: &str) -> (Option<String>, Option<String>,
                             // looks like a value name (contains lowercase or angle brackets).
                             if val
                                 .chars()
-                                .any(|c| c.is_lowercase() || c == '<' || c == '>')
+                                .any(|c| c.is_alphabetic() || c == '<' || c == '>')
                             {
                                 if value_name.is_none() {
                                     value_name = Some(
@@ -3713,6 +3752,623 @@ Commands:
                         ..Default::default()
                     },
                     description_contains: "disable audio",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn test_df_help() {
+        let cmd = parse_test_help("df");
+        assert_eq!(cmd.name.as_deref(), Some("df"));
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-a".to_string()),
+                        long: Some("--all".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "include pseudo, duplicate, inaccessible file systems",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-B".to_string()),
+                        long: Some("--block-size".to_string()),
+                        value_name: Some("SIZE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "scale sizes by SIZE before printing them",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-h".to_string()),
+                        long: Some("--human-readable".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print sizes in powers of 1024",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-H".to_string()),
+                        long: Some("--si".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print sizes in powers of 1000",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-i".to_string()),
+                        long: Some("--inodes".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "list inode information instead of block usage",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-k".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "like --block-size=1K",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-l".to_string()),
+                        long: Some("--local".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "limit listing to local file systems",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--no-sync".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "do not invoke sync before getting usage info",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--output".to_string()),
+                        value_name: Some("FIELD_LIST".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "use the output format defined by FIELD_LIST",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-P".to_string()),
+                        long: Some("--portability".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "use the POSIX output format",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--sync".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "invoke sync before getting usage info",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--total".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "produce a grand total",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-t".to_string()),
+                        long: Some("--type".to_string()),
+                        value_name: Some("TYPE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "limit listing to file systems of type TYPE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-T".to_string()),
+                        long: Some("--print-type".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print file system type",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-x".to_string()),
+                        long: Some("--exclude-type".to_string()),
+                        value_name: Some("TYPE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "limit listing to file systems not of type TYPE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "(ignored)",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn test_du_help() {
+        let cmd = parse_test_help("du");
+        assert_eq!(cmd.name.as_deref(), Some("du"));
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-0".to_string()),
+                        long: Some("--null".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "end each output line with NUL",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-a".to_string()),
+                        long: Some("--all".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "write counts for all files, not just directories",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--apparent-size".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print apparent sizes rather than device usage",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-B".to_string()),
+                        long: Some("--block-size".to_string()),
+                        value_name: Some("SIZE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "scale sizes by SIZE before printing them",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-b".to_string()),
+                        long: Some("--bytes".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "equivalent to '--apparent-size --block-size=1'",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-c".to_string()),
+                        long: Some("--total".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "produce a grand total",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-D".to_string()),
+                        long: Some("--dereference-args".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "dereference only symlinks that are listed",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-d".to_string()),
+                        long: Some("--max-depth".to_string()),
+                        value_name: Some("N".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print the total for a directory",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--files0-from".to_string()),
+                        value_name: Some("F".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "summarize device usage of the NUL-terminated file names",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-H".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "equivalent to --dereference-args",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-h".to_string()),
+                        long: Some("--human-readable".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print sizes in human readable format",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--inodes".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "list inode usage information",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-k".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "like --block-size=1K",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-L".to_string()),
+                        long: Some("--dereference".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "dereference all symbolic links",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-l".to_string()),
+                        long: Some("--count-links".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "count sizes many times if hard linked",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-m".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "like --block-size=1M",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-P".to_string()),
+                        long: Some("--no-dereference".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "don't follow any symbolic links",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-S".to_string()),
+                        long: Some("--separate-dirs".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "for directories do not include size of subdirectories",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--si".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "like -h, but use powers of 1000",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-s".to_string()),
+                        long: Some("--summarize".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "display only a total for each argument",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-t".to_string()),
+                        long: Some("--threshold".to_string()),
+                        value_name: Some("SIZE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "exclude entries smaller than SIZE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--time".to_string()),
+                        value_name: Some("WORD".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "show time of the last modification",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--time-style".to_string()),
+                        value_name: Some("STYLE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "show times using STYLE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-X".to_string()),
+                        long: Some("--exclude-from".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "exclude files that match any pattern in FILE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--exclude".to_string()),
+                        value_name: Some("PATTERN".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "exclude files that match PATTERN",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-x".to_string()),
+                        long: Some("--one-file-system".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "skip directories on different file systems",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn test_xargs_help() {
+        let cmd = parse_test_help("xargs");
+        assert_eq!(cmd.name.as_deref(), Some("xargs"));
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-0".to_string()),
+                        long: Some("--null".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "items are separated by a null, not whitespace",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-a".to_string()),
+                        long: Some("--arg-file".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "read arguments from FILE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-d".to_string()),
+                        long: Some("--delimiter".to_string()),
+                        value_name: Some("CHARACTER".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "items in input stream are separated by CHARACTER",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-E".to_string()),
+                        long: None,
+                        value_name: Some("END".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "set logical EOF string",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-e".to_string()),
+                        long: Some("--eof".to_string()),
+                        value_name: Some("END".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "equivalent to -E END",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-I".to_string()),
+                        long: None,
+                        value_name: Some("R".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "same as --replace=R",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-i".to_string()),
+                        long: Some("--replace".to_string()),
+                        value_name: Some("R".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "replace R in INITIAL-ARGS",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-L".to_string()),
+                        long: Some("--max-lines".to_string()),
+                        value_name: Some("MAX-LINES".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "use at most MAX-LINES",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-l".to_string()),
+                        long: None,
+                        value_name: Some("MAX-LINES".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "similar to -L but defaults",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-n".to_string()),
+                        long: Some("--max-args".to_string()),
+                        value_name: Some("MAX-ARGS".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "use at most MAX-ARGS",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-o".to_string()),
+                        long: Some("--open-tty".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Reopen stdin as /dev/tty",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-P".to_string()),
+                        long: Some("--max-procs".to_string()),
+                        value_name: Some("MAX-PROCS".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "run at most MAX-PROCS",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-p".to_string()),
+                        long: Some("--interactive".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "prompt before running commands",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--process-slot-var".to_string()),
+                        value_name: Some("VAR".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "set environment variable VAR",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: Some("--no-run-if-empty".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "if there are no arguments, then do not run",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-s".to_string()),
+                        long: Some("--max-chars".to_string()),
+                        value_name: Some("MAX-CHARS".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "limit length of command line to MAX-CHARS",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--show-limits".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "show limits on command-line length",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-t".to_string()),
+                        long: Some("--verbose".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "print commands before executing them",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-x".to_string()),
+                        long: Some("--exit".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "exit if the size",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
                 },
             ],
         );
