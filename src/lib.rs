@@ -303,8 +303,19 @@ impl Command {
     pub fn populate_possible_values(&mut self) {
         for arg in &mut self.args {
             if arg.value_enum.is_none() {
-                arg.value_enum =
-                    parse_possible_values(arg.value_name.as_deref(), arg.description.as_deref());
+                let should_parse = if arg.value_name.is_none() && arg.num_args.is_none() {
+                    arg.description
+                        .as_ref()
+                        .map_or(false, |desc| desc.contains("/="))
+                } else {
+                    true
+                };
+                if should_parse {
+                    arg.value_enum = parse_possible_values(
+                        arg.value_name.as_deref(),
+                        arg.description.as_deref(),
+                    );
+                }
             }
             if arg.value_hint == ValueHint::Unknown {
                 arg.value_hint =
@@ -710,18 +721,22 @@ pub fn parse_possible_values(
     static RE_DEFAULT_SEP: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     static RE_DEFAULT_LABEL: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
 
-    // 0. Check if value_name is a literal lowercase value (like links, follow-links)
+    // 0. Check if value_name is a literal lowercase value (like links, follow-links, lz4)
     if let Some(vt) = value_name {
         if !vt.starts_with('<') && !vt.starts_with('[') && !vt.ends_with('>') && !vt.ends_with(']')
         {
             let clean_type = vt.trim_matches(|c| c == '[' || c == ']' || c == '<' || c == '>');
-            if !clean_type.is_empty() && clean_type.chars().all(|c| c.is_lowercase() || c == '-') {
+            if !clean_type.is_empty()
+                && clean_type
+                    .chars()
+                    .all(|c| c.is_lowercase() || c.is_numeric() || c == '-' || c == '_')
+            {
                 return Some(vec![clean_type.to_string()]);
             }
         }
     }
 
-    // 1. Try to parse from value_name (e.g. {info,debug} or info|debug or 0..5)
+    // 1. Try to parse from value_name (e.g. {info,debug} or info|debug or {physical|logical} or 0..5)
     if let Some(vt) = value_name {
         let clean_type = vt.trim_matches(|c| c == '[' || c == ']' || c == '<' || c == '>');
 
@@ -740,7 +755,7 @@ pub fn parse_possible_values(
         if clean_type.starts_with('{') && clean_type.ends_with('}') {
             let inner = &clean_type[1..clean_type.len() - 1];
             let parts: Vec<String> = inner
-                .split(',')
+                .split(|c| c == ',' || c == '|')
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
@@ -1736,9 +1751,7 @@ fn run_help_attempt(
 
     let use_sandbox = sandbox && is_sandboxing_available();
     if sandbox && !use_sandbox {
-        log::warn!(
-            "bubblewrap (bwrap) not found in PATH; running completion check unsandboxed."
-        );
+        log::warn!("bubblewrap (bwrap) not found in PATH; running completion check unsandboxed.");
     }
 
     let mut child = if use_sandbox {

@@ -2475,6 +2475,14 @@ mod tests {
                 },
                 ExpectedArg {
                     arg: Arg {
+                        short: Some("-d".to_string()),
+                        long: Some("--decompress".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Perform decompression",
+                },
+                ExpectedArg {
+                    arg: Arg {
                         short: Some("-D".to_string()),
                         value_name: Some("DICT".to_string()),
                         num_args: Some("1".to_string()),
@@ -2482,6 +2490,30 @@ mod tests {
                         ..Default::default()
                     },
                     description_contains: "Use DICT as the dictionary",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-f".to_string()),
+                        long: Some("--force".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Disable input and output checks",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-c".to_string()),
+                        long: Some("--stdout".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Write to STDOUT",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: Some("--verbose".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Enable verbose output",
                 },
                 ExpectedArg {
                     arg: Arg {
@@ -2495,13 +2527,102 @@ mod tests {
                 },
                 ExpectedArg {
                     arg: Arg {
+                        long: Some("--filelist".to_string()),
+                        value_name: Some("LIST".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "Read a list of files",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--output-dir-flat".to_string()),
+                        value_name: Some("DIR".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::DirPath,
+                        ..Default::default()
+                    },
+                    description_contains: "Store processed files in DIR",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--check".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        value_enum: None,
+                        ..Default::default()
+                    },
+                    description_contains: "Add XXH64 integrity checksums",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--fast".to_string()),
+                        value_name: Some("#".to_string()),
+                        num_args: Some("?".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "very fast compression levels",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--long".to_string()),
+                        value_name: Some("#".to_string()),
+                        num_args: Some("?".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Enable long distance matching",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-T#".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Spawn # compression threads",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--auto-threads".to_string()),
+                        value_name: Some("{physical|logical}".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec!["physical".to_string(), "logical".to_string()]),
+                        ..Default::default()
+                    },
+                    description_contains: "Use physical/logical cores",
+                },
+                ExpectedArg {
+                    arg: Arg {
                         long: Some("--format".to_string()),
                         value_name: Some("zstd".to_string()),
                         num_args: Some("1".to_string()),
-                        value_hint: ValueHint::Unknown,
+                        value_enum: Some(vec![
+                            "zstd".to_string(),
+                            "gzip".to_string(),
+                            "xz".to_string(),
+                            "lzma".to_string(),
+                            "lz4".to_string(),
+                        ]),
                         ..Default::default()
                     },
                     description_contains: "Compress files to the",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--mmap-dict".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        value_enum: None,
+                        ..Default::default()
+                    },
+                    description_contains: "Memory-map dictionary file",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-l".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print information about Zstandard-compressed",
                 },
                 ExpectedArg {
                     arg: Arg {
@@ -2519,10 +2640,29 @@ mod tests {
                 },
                 ExpectedArg {
                     arg: Arg {
-                        short: Some("-T#".to_string()),
+                        long: Some("--train-cover".to_string()),
+                        value_name: Some("k=#,d=#,steps=#,split=#,shrink[=#]".to_string()),
+                        num_args: Some("?".to_string()),
                         ..Default::default()
                     },
-                    description_contains: "Spawn # compression threads",
+                    description_contains: "Use the cover algorithm",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-S".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Output one benchmark result per input file",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--priority".to_string()),
+                        value_name: Some("rt".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec!["rt".to_string()]),
+                        ..Default::default()
+                    },
+                    description_contains: "Set process priority to real-time",
                 },
             ],
         );

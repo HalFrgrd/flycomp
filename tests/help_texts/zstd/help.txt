@@ -73,7 +73,8 @@ Advanced compression options:
                                 the 'greedy', 'lazy', and 'lazy2' strategies.
 
   --format=zstd                 Compress files to the `.zst` format. [Default]
-  --mmap-dict                   Memory-map dictionary file rather than mallocing and loading all at once  --format=gzip                 Compress files to the `.gz` format.
+  --mmap-dict                   Memory-map dictionary file rather than mallocing and loading all at once
+  --format=gzip                 Compress files to the `.gz` format.
   --format=xz                   Compress files to the `.xz` format.
   --format=lzma                 Compress files to the `.lzma` format.
   --format=lz4                 Compress files to the `.lz4` format.
