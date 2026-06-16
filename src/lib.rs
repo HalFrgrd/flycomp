@@ -35,6 +35,22 @@ pub fn reset_stats() {
     HELP_RUNS.with(|c| c.set(0));
 }
 
+pub fn is_sandboxing_available() -> bool {
+    // Test if bwrap exists in PATH by trying to spawn it with --version
+    match std::process::Command::new("bwrap")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(mut child) => {
+            let _ = child.wait();
+            true
+        }
+        _ => false,
+    }
+}
+
 mod parse_help;
 pub mod parse_man;
 
@@ -1718,27 +1734,12 @@ fn run_help_attempt(
         }
     }
 
-    let use_sandbox = sandbox && {
-        // Test if bwrap exists in PATH by trying to spawn it with --version
-        match std::process::Command::new("bwrap")
-            .arg("--version")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-        {
-            Ok(mut child) => {
-                let _ = child.wait();
-                true
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                log::warn!(
-                    "bubblewrap (bwrap) not found in PATH; running completion check unsandboxed."
-                );
-                false
-            }
-            Err(_) => false,
-        }
-    };
+    let use_sandbox = sandbox && is_sandboxing_available();
+    if sandbox && !use_sandbox {
+        log::warn!(
+            "bubblewrap (bwrap) not found in PATH; running completion check unsandboxed."
+        );
+    }
 
     let mut child = if use_sandbox {
         let mut cmd = std::process::Command::new("bwrap");
