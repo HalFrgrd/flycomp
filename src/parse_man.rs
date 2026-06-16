@@ -1165,6 +1165,57 @@ fn parse_subcommands(cmd: &mut Command, content: &str) -> bool {
     found
 }
 
+fn parse_main_description(cmd: &mut Command, content: &str) {
+    let cmd_name = match &cmd.name {
+        Some(n) => n.as_str(),
+        None => return,
+    };
+
+    let mut in_name_section = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with(".SH ") || trimmed.starts_with(".Sh ") {
+            let section_name = trimmed[4..].trim().trim_matches('"').to_uppercase();
+            if section_name == "NAME" {
+                in_name_section = true;
+                continue;
+            } else {
+                if in_name_section {
+                    break;
+                }
+            }
+        }
+
+        if in_name_section {
+            if trimmed.starts_with(".Nd ") {
+                let desc = trimmed[4..].trim();
+                let clean_desc = clean_sentence(&normalize_text(desc, cmd_name));
+                if !clean_desc.is_empty() {
+                    cmd.description = Some(clean_desc);
+                    break;
+                }
+            }
+
+            let normalized_line = normalize_text(line, cmd_name);
+            if !normalized_line.is_empty() {
+                if let Some(pos) = normalized_line.find(" - ") {
+                    let left = normalized_line[..pos].trim();
+                    let right = normalized_line[pos + 3..].trim();
+                    let left_lower = left.to_lowercase();
+                    let cmd_name_lower = cmd_name.to_lowercase();
+                    if left_lower.contains(&cmd_name_lower) {
+                        let clean_desc = clean_sentence(right);
+                        if !clean_desc.is_empty() {
+                            cmd.description = Some(clean_desc);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn parse_manpage_base(cmd_name: &str, content: &str) -> Option<Command> {
     let mut cmd = Command {
         name: Some(cmd_name.to_string()),
@@ -1176,6 +1227,7 @@ fn parse_manpage_base(cmd_name: &str, content: &str) -> Option<Command> {
     };
 
     parse_subcommands(&mut cmd, content);
+    parse_main_description(&mut cmd, content);
 
     let parsers: [fn(&mut Command, &str) -> bool; 7] = [
         parse_scdoc,
@@ -4209,6 +4261,7 @@ Use asynchronous IO.
     #[test]
     fn parses_real_uname_fixture() {
         let cmd = parse_test_manpage("uname.1");
+        assert_eq!(cmd.description.as_deref(), Some("print system information"));
         assert_expected_subcommands(&cmd, &[]);
         assert_contains_expected_args(
             &cmd,
@@ -4308,6 +4361,7 @@ Use asynchronous IO.
     #[test]
     fn parses_real_touch_fixture() {
         let cmd = parse_test_manpage("touch.1");
+        assert_eq!(cmd.description.as_deref(), Some("change file timestamps"));
         assert_expected_subcommands(&cmd, &[]);
         assert_contains_expected_args(
             &cmd,
@@ -4416,6 +4470,10 @@ Use asynchronous IO.
     #[test]
     fn parses_real_head_fixture() {
         let cmd = parse_test_manpage("head.1");
+        assert_eq!(
+            cmd.description.as_deref(),
+            Some("output the first part of files")
+        );
         assert_expected_subcommands(&cmd, &[]);
         assert_contains_expected_args(
             &cmd,

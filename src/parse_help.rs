@@ -5117,6 +5117,10 @@ Commands:
     fn test_uname_help() {
         let cmd = parse_test_help("uname");
         assert_eq!(cmd.name.as_deref(), Some("uname"));
+        assert_eq!(
+            cmd.description.as_deref(),
+            Some("Print certain system information.  With no OPTION, same as -s.")
+        );
         assert_contains_expected_args(
             &cmd,
             &[
@@ -5216,6 +5220,10 @@ Commands:
     fn test_touch_help() {
         let cmd = parse_test_help("touch");
         assert_eq!(cmd.name.as_deref(), Some("touch"));
+        assert_eq!(
+            cmd.description.as_deref(),
+            Some("Update the access and modification times of each FILE to the current time.")
+        );
         assert_contains_expected_args(
             &cmd,
             &[
@@ -5324,6 +5332,10 @@ Commands:
     fn test_head_help() {
         let cmd = parse_test_help("head");
         assert_eq!(cmd.name.as_deref(), Some("head"));
+        assert_eq!(
+            cmd.description.as_deref(),
+            Some("Print the first 10 lines of each FILE to standard output.")
+        );
         assert_contains_expected_args(
             &cmd,
             &[
