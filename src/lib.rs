@@ -503,7 +503,17 @@ pub fn extract_value_hint(value_name: Option<&str>, description: Option<&str>) -
     if name_has_word("revision") || name_has_word("commit") {
         return ValueHint::GitRevision;
     }
-    if name_has_word("service") || name_has_word("unit") {
+    if name_has_word("service")
+        || (name_has_word("unit")
+            && !desc_contains("time")
+            && !desc_contains("size")
+            && !desc_contains("bytes")
+            && !desc_contains("speed")
+            && !desc_contains("duration")
+            && !desc_contains("interval")
+            && !desc_contains("format")
+            && !desc_contains("measure"))
+    {
         return ValueHint::SystemdUnit;
     }
     // Dict, Log, Archive, and File are FilePaths
@@ -733,21 +743,6 @@ pub fn parse_possible_values(
     static RE_DEFAULT_SEP: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     static RE_DEFAULT_LABEL: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
 
-    // 0. Check if value_name is a literal lowercase value (like links, follow-links, lz4)
-    if let Some(vt) = value_name {
-        if !vt.starts_with('<') && !vt.starts_with('[') && !vt.ends_with('>') && !vt.ends_with(']')
-        {
-            let clean_type = vt.trim_matches(|c| c == '[' || c == ']' || c == '<' || c == '>');
-            if !clean_type.is_empty()
-                && clean_type
-                    .chars()
-                    .all(|c| c.is_lowercase() || c.is_numeric() || c == '-' || c == '_')
-            {
-                return Some(vec![clean_type.to_string()]);
-            }
-        }
-    }
-
     // 1. Try to parse from value_name (e.g. {info,debug} or info|debug or {physical|logical} or 0..5)
     if let Some(vt) = value_name {
         let clean_type = vt.trim_matches(|c| c == '[' || c == ']' || c == '<' || c == '>');
@@ -810,6 +805,21 @@ pub fn parse_possible_values(
 
         if let Some(list_vals) = parse_bulleted_list_values(desc) {
             return Some(list_vals);
+        }
+
+        // Try to parse parenthesized shortcut choices like (s)witch, (i)gnore, (w)ipe
+        static RE_PAREN_SHORTCUTS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+        let re_paren_shortcuts = RE_PAREN_SHORTCUTS
+            .get_or_init(|| regex::Regex::new(r"\(([a-zA-Z0-9])\)[a-zA-Z0-9_-]+").unwrap());
+        let mut shortcut_vals = Vec::new();
+        for caps in re_paren_shortcuts.captures_iter(desc) {
+            let val = caps.get(1).unwrap().as_str().to_string();
+            if !shortcut_vals.contains(&val) {
+                shortcut_vals.push(val);
+            }
+        }
+        if shortcut_vals.len() >= 2 {
+            return Some(shortcut_vals);
         }
 
         // Try to parse brace-enclosed choices like {all,none,older(default)}
@@ -1021,6 +1031,21 @@ pub fn parse_possible_values(
                         return Some(values);
                     }
                 }
+            }
+        }
+    }
+
+    // 3. Fallback: Check if value_name is a literal lowercase value (like links, follow-links, lz4)
+    if let Some(vt) = value_name {
+        if !vt.starts_with('<') && !vt.starts_with('[') && !vt.ends_with('>') && !vt.ends_with(']')
+        {
+            let clean_type = vt.trim_matches(|c| c == '[' || c == ']' || c == '<' || c == '>');
+            if !clean_type.is_empty()
+                && clean_type
+                    .chars()
+                    .all(|c| c.is_lowercase() || c.is_numeric() || c == '-' || c == '_')
+            {
+                return Some(vec![clean_type.to_string()]);
             }
         }
     }
@@ -2758,6 +2783,23 @@ fi
         assert_eq!(
             parse_possible_values(None, Some("Modes:\n  * fast\n  * slow")),
             Some(vec!["fast".to_string(), "slow".to_string()])
+        );
+
+        // Test parenthesized shortcut choice parsing
+        assert_eq!(
+            parse_possible_values(
+                None,
+                Some(
+                    "Default action when a path already exists: (s)witch, (i)gnore, (w)ipe, (b)ackup, (a)bort"
+                )
+            ),
+            Some(vec![
+                "s".to_string(),
+                "i".to_string(),
+                "w".to_string(),
+                "b".to_string(),
+                "a".to_string()
+            ])
         );
 
         // Test none when no matches or junk

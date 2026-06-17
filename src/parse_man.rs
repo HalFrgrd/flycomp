@@ -1637,6 +1637,17 @@ None documented.
                 },
                 description_contains: "retrieve the value",
             },
+            ExpectedArg {
+                arg: Arg {
+                    short: None,
+                    long: Some("--exec-path".to_string()),
+                    value_name: Some("<path>".to_string()),
+                    num_args: Some("?".to_string()),
+                    value_hint: crate::ValueHint::AnyPath,
+                    ..Default::default()
+                },
+                description_contains: "Path to wherever your core Git programs are installed",
+            },
         ];
 
         assert_contains_expected_args(&cmd, &expected);
@@ -2506,6 +2517,16 @@ None documented.
                 },
                 ExpectedArg {
                     arg: Arg {
+                        short: None,
+                        long: Some("--silent".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "suppress automatic printing of pattern space",
+                },
+                ExpectedArg {
+                    arg: Arg {
                         short: Some("-e".to_string()),
                         long: Some("--expression".to_string()),
                         value_name: Some("script".to_string()),
@@ -2513,6 +2534,17 @@ None documented.
                         ..Default::default()
                     },
                     description_contains: "add the script to the commands",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-f".to_string()),
+                        long: Some("--file".to_string()),
+                        value_name: Some("script-file".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "add the contents of script-file to the commands",
                 },
                 ExpectedArg {
                     arg: Arg {
@@ -2526,6 +2558,17 @@ None documented.
                 },
                 ExpectedArg {
                     arg: Arg {
+                        short: Some("-l".to_string()),
+                        long: Some("--line-length".to_string()),
+                        value_name: Some("N".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "specify the desired line-wrap length",
+                },
+                ExpectedArg {
+                    arg: Arg {
                         short: Some("-u".to_string()),
                         long: Some("--unbuffered".to_string()),
                         value_name: None,
@@ -2533,6 +2576,32 @@ None documented.
                         ..Default::default()
                     },
                     description_contains: "load minimal amounts of data",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--sandbox".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "operate in sandbox mode",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-E".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "use extended regular expressions in the script",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: Some("--regexp-extended".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "use extended regular expressions in the script",
                 },
             ],
         );
@@ -5009,7 +5078,6 @@ Use asynchronous IO.
                             "millisecond".to_string(),
                             "second".to_string(),
                         ]),
-                        value_hint: ValueHint::SystemdUnit,
                         ..Default::default()
                     },
                     description_contains: "Set the time unit to be used",

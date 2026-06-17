@@ -3306,6 +3306,22 @@ Commands:
                     },
                     description_contains: "Store the cache data in",
                 },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--exists-action".to_string()),
+                        value_name: Some("action".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "s".to_string(),
+                            "i".to_string(),
+                            "w".to_string(),
+                            "b".to_string(),
+                            "a".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "Default action when a path already exists",
+                },
             ],
         );
     }
@@ -5871,7 +5887,7 @@ OPTIONS:
                         value_name: Some("UNIT".to_string()),
                         num_args: Some("1".to_string()),
                         value_enum: Some(vec!["millisecond".to_string(), "second".to_string()]),
-                        value_hint: ValueHint::SystemdUnit,
+                        value_hint: ValueHint::Unknown,
                         ..Default::default()
                     },
                     description_contains: "Set the time unit to be used",
