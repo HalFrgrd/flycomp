@@ -575,7 +575,24 @@ pub fn extract_value_hint(value_name: Option<&str>, description: Option<&str>) -
     if desc_contains("username") || desc_contains("user name") || desc_contains("login name") {
         return ValueHint::Username;
     }
-    if desc_contains("command line") || desc_contains("command-line") {
+    if (desc_contains("command line") || desc_contains("command-line"))
+        && !desc_contains("command line file")
+        && !desc_contains("command-line file")
+        && !desc_contains("command line directory")
+        && !desc_contains("command-line directory")
+        && !desc_contains("command line dir")
+        && !desc_contains("command-line dir")
+        && !desc_contains("command line arg")
+        && !desc_contains("command-line arg")
+        && !desc_contains("command line option")
+        && !desc_contains("command-line option")
+        && !desc_contains("command line flag")
+        && !desc_contains("command-line flag")
+        && !desc_contains("command line parameter")
+        && !desc_contains("command-line parameter")
+        && !desc_contains("command line param")
+        && !desc_contains("command-line param")
+    {
         return ValueHint::CommandString;
     }
     if desc_contains("command name") || desc_contains("cmd name") {
@@ -593,7 +610,27 @@ pub fn extract_value_hint(value_name: Option<&str>, description: Option<&str>) -
         || desc_contains("env variable")
         || desc_contains("env-var")
     {
-        return ValueHint::EnvVar;
+        let is_non_env_var_name = if let Some(ref name) = name_lower {
+            name == "string"
+                || name == "suffix"
+                || name == "prefix"
+                || name == "pattern"
+                || name == "glob"
+                || name == "command"
+                || name == "cmd"
+                || name == "file"
+                || name == "dir"
+                || name == "directory"
+                || name == "path"
+                || name == "format"
+                || name == "date"
+                || name == "time"
+        } else {
+            false
+        };
+        if !is_non_env_var_name {
+            return ValueHint::EnvVar;
+        }
     }
     if desc_contains("network interface") {
         return ValueHint::NetworkInterface;
@@ -620,28 +657,89 @@ pub fn extract_value_hint(value_name: Option<&str>, description: Option<&str>) -
         return ValueHint::Integral;
     }
 
+    let is_known_non_path_value = if let Some(ref name) = name_lower {
+        name == "when"
+            || name == "mode"
+            || name == "type"
+            || name == "format"
+            || name == "how"
+            || name == "value"
+            || name == "val"
+            || name == "values"
+            || name == "key"
+            || name == "lang"
+            || name == "language"
+            || name == "locale"
+            || name == "encoding"
+            || name == "charset"
+            || name == "bool"
+            || name == "boolean"
+            || name == "level"
+            || name == "width"
+            || name == "height"
+            || name == "size"
+            || name == "count"
+            || name == "num"
+            || name == "number"
+            || name == "color"
+            || name == "colour"
+            || name == "speed"
+            || name == "rate"
+            || name == "delay"
+            || name == "timeout"
+            || name == "pattern"
+            || name == "patterns"
+            || name == "glob"
+            || name == "action"
+            || name == "actions"
+            || name == "sep"
+            || name == "separator"
+            || name == "date"
+            || name == "time"
+            || name == "datetime"
+            || name == "timestamp"
+            || name == "expression"
+            || name == "expr"
+            || name == "string"
+            || name == "suffix"
+            || name == "prefix"
+            || name == "ext"
+            || name == "extension"
+            || name == "style"
+            || name == "keyword"
+            || name == "name"
+            || name == "regex"
+            || name == "regexp"
+            || name == "symbol"
+            || name == "token"
+    } else {
+        false
+    };
+
     // Paths/Directories/Files in description
-    if desc_contains("directory path")
-        || desc_contains("folder path")
-        || desc_contains("path to directory")
-        || desc_contains("path to folder")
-    {
-        return ValueHint::DirPath;
-    }
-    if desc_contains("file path")
-        || desc_contains("path to file")
-        || desc_contains("filename")
-        || desc_contains("file name")
-        || desc_contains("dictionary file")
-        || desc_contains("log file")
-    {
-        return ValueHint::FilePath;
-    }
-    if desc_contains("path to the chosen file") || desc_contains("write traces to") {
-        return ValueHint::FilePath;
-    }
-    if desc_contains("path to") {
-        return ValueHint::AnyPath;
+    if !is_known_non_path_value {
+        if desc_contains("directory path")
+            || desc_contains("folder path")
+            || desc_contains("path to directory")
+            || desc_contains("path to folder")
+        {
+            return ValueHint::DirPath;
+        }
+        if desc_contains("file path")
+            || desc_contains("path to file")
+            || desc_contains("filename")
+            || desc_contains("file name")
+            || desc_contains("dictionary file")
+            || desc_contains("log file")
+        {
+            return ValueHint::FilePath;
+        }
+        if desc_contains("path to the chosen file") || desc_contains("write traces to") {
+            return ValueHint::FilePath;
+        }
+        if desc_contains("path to") {
+            return ValueHint::AnyPath;
+        }
     }
 
     // Specific heuristics:
@@ -1378,6 +1476,10 @@ pub fn to_clap_command(cmd: &Command) -> clap::Command {
         }
 
         let mut clap_arg = clap::Arg::new(id.clone());
+
+        if !arg.takes_value() {
+            clap_arg = clap_arg.action(clap::ArgAction::SetTrue);
+        }
 
         if let Some(long) = &long_bare {
             clap_arg = clap_arg.long(long.clone());
@@ -2556,6 +2658,19 @@ mod tests {
             .find(|a| a.get_id().as_str() == "port")
             .unwrap();
         assert_eq!(port_arg.get_value_hint(), clap::ValueHint::Other);
+        assert_eq!(format!("{:?}", port_arg.get_action()), "Set");
+
+        let verbose_arg = clap_cmd
+            .get_arguments()
+            .find(|a| a.get_id().as_str() == "verbose")
+            .unwrap();
+        assert_eq!(format!("{:?}", verbose_arg.get_action()), "SetTrue");
+
+        let output_arg = clap_cmd
+            .get_arguments()
+            .find(|a| a.get_id().as_str() == "output")
+            .unwrap();
+        assert_eq!(format!("{:?}", output_arg.get_action()), "Set");
 
         // Check subcommand is present.
         let sub_names: Vec<&str> = clap_cmd.get_subcommands().map(|s| s.get_name()).collect();

@@ -1657,7 +1657,7 @@ None documented.
     fn parses_real_cat_fixture() {
         let cmd = parse_test_manpage("cat.1");
         assert_expected_subcommands(&cmd, &[]);
-        assert_contains_expected_args(
+        assert_expected_args(
             &cmd,
             &[
                 ExpectedArg {
@@ -1788,7 +1788,7 @@ None documented.
     fn parses_real_chmod_fixture() {
         let cmd = parse_test_manpage("chmod.1");
         assert_expected_subcommands(&cmd, &[]);
-        assert_contains_expected_args(
+        assert_expected_args(
             &cmd,
             &[
                 ExpectedArg {
@@ -1803,6 +1803,26 @@ None documented.
                 },
                 ExpectedArg {
                     arg: Arg {
+                        short: Some("-f".to_string()),
+                        long: Some("--silent".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "suppress most error messages",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--quiet".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "suppress most error messages",
+                },
+                ExpectedArg {
+                    arg: Arg {
                         short: Some("-v".to_string()),
                         long: Some("--verbose".to_string()),
                         value_name: None,
@@ -1810,6 +1830,26 @@ None documented.
                         ..Default::default()
                     },
                     description_contains: "diagnostic for every file processed",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--no-preserve-root".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "do not treat '/' specially",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--preserve-root".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "fail to operate recursively on '/'",
                 },
                 ExpectedArg {
                     arg: Arg {
@@ -1832,6 +1872,26 @@ None documented.
                     },
                     description_contains: "change files and directories recursively",
                 },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
+                },
             ],
         );
     }
@@ -1840,7 +1900,7 @@ None documented.
     fn parses_real_chown_fixture() {
         let cmd = parse_test_manpage("chown.1");
         assert_expected_subcommands(&cmd, &[]);
-        assert_contains_expected_args(
+        assert_expected_args(
             &cmd,
             &[
                 ExpectedArg {
@@ -1852,6 +1912,46 @@ None documented.
                         ..Default::default()
                     },
                     description_contains: "report only when a change is made",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-f".to_string()),
+                        long: Some("--silent".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "suppress most error messages",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--quiet".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "suppress most error messages",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: Some("--verbose".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "output a diagnostic for every file processed",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--dereference".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "affect the referent of each symbolic link",
                 },
                 ExpectedArg {
                     arg: Arg {
@@ -1876,6 +1976,26 @@ None documented.
                 ExpectedArg {
                     arg: Arg {
                         short: None,
+                        long: Some("--no-preserve-root".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "do not treat '/' specially",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--preserve-root".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "fail to operate recursively on '/'",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
                         long: Some("--reference".to_string()),
                         value_name: Some("RFILE".to_string()),
                         num_args: Some("1".to_string()),
@@ -1883,6 +2003,66 @@ None documented.
                         ..Default::default()
                     },
                     description_contains: "use RFILE's owner and group",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-R".to_string()),
+                        long: Some("--recursive".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "operate on files and directories recursively",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-H".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "if a command line argument is a symbolic link",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-L".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "traverse every symbolic link to a directory",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-P".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "do not traverse any symbolic links",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
                 },
             ],
         );
@@ -1892,7 +2072,7 @@ None documented.
     fn parses_real_cp_fixture() {
         let cmd = parse_test_manpage("cp.1");
         assert_expected_subcommands(&cmd, &[]);
-        assert_contains_expected_args(
+        assert_expected_args(
             &cmd,
             &[
                 ExpectedArg {
@@ -1907,6 +2087,26 @@ None documented.
                 },
                 ExpectedArg {
                     arg: Arg {
+                        short: None,
+                        long: Some("--attributes-only".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "don't copy the file data",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--backup".to_string()),
+                        value_name: Some("CONTROL".to_string()),
+                        num_args: Some("?".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "make a backup of each existing destination file",
+                },
+                ExpectedArg {
+                    arg: Arg {
                         short: Some("-b".to_string()),
                         long: None,
                         value_name: None,
@@ -1918,12 +2118,212 @@ None documented.
                 ExpectedArg {
                     arg: Arg {
                         short: None,
-                        long: Some("--attributes-only".to_string()),
+                        long: Some("--copy-contents".to_string()),
                         value_name: None,
                         num_args: None,
                         ..Default::default()
                     },
-                    description_contains: "don't copy the file data",
+                    description_contains: "copy contents of special files when recursive",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-d".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "same as --no-dereference --preserve=links",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--debug".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "explain how a file is copied",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-f".to_string()),
+                        long: Some("--force".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "remove it and try again",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-i".to_string()),
+                        long: Some("--interactive".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "prompt before overwrite",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-H".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "follow command-line symbolic links in SOURCE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-l".to_string()),
+                        long: Some("--link".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "hard link files instead of copying",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-L".to_string()),
+                        long: Some("--dereference".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "always follow symbolic links in SOURCE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-n".to_string()),
+                        long: Some("--no-clobber".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "do not overwrite an existing file",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-P".to_string()),
+                        long: Some("--no-dereference".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "never follow symbolic links in SOURCE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-p".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "same as --preserve=mode,ownership,timestamps",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--preserve".to_string()),
+                        value_name: Some("ATTR_LIST".to_string()),
+                        num_args: Some("?".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "preserve the specified attributes",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--no-preserve".to_string()),
+                        value_name: Some("ATTR_LIST".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "don't preserve the specified attributes",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--parents".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "use full source file name under DIRECTORY",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-R".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "copy directories recursively",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: Some("--recursive".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "copy directories recursively",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--reflink".to_string()),
+                        value_name: Some("WHEN".to_string()),
+                        num_args: Some("?".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "control clone/CoW copies",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--remove-destination".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "remove each existing destination file before",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--sparse".to_string()),
+                        value_name: Some("WHEN".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "control creation of sparse files",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--strip-trailing-slashes".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "remove any trailing slashes from each SOURCE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-s".to_string()),
+                        long: Some("--symbolic-link".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "make symbolic links instead of copying",
                 },
                 ExpectedArg {
                     arg: Arg {
@@ -1934,6 +2334,112 @@ None documented.
                         ..Default::default()
                     },
                     description_contains: "override the usual backup suffix",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-t".to_string()),
+                        long: Some("--target-directory".to_string()),
+                        value_name: Some("DIRECTORY".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::DirPath,
+                        ..Default::default()
+                    },
+                    description_contains: "copy all SOURCE arguments into DIRECTORY",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-T".to_string()),
+                        long: Some("--no-target-directory".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "treat DEST as a normal file",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--update".to_string()),
+                        value_name: Some("UPDATE".to_string()),
+                        num_args: Some("?".to_string()),
+                        value_enum: Some(vec![
+                            "all".to_string(),
+                            "none".to_string(),
+                            "older".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "control which existing files are updated",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-u".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "equivalent to --update",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: Some("--verbose".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "explain what is being done",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-x".to_string()),
+                        long: Some("--one-file-system".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "stay on this file system",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-Z".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "set SELinux security context of destination",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--context".to_string()),
+                        value_name: Some("CTX".to_string()),
+                        num_args: Some("?".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "like -Z, or if CTX is specified then set the",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
                 },
             ],
         );
@@ -2071,6 +2577,50 @@ None documented.
                         ..Default::default()
                     },
                     description_contains: "lines of output context",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--color".to_string()),
+                        value_name: Some("WHEN".to_string()),
+                        num_args: Some("?".to_string()),
+                        value_hint: crate::ValueHint::Unknown,
+                        ..Default::default()
+                    },
+                    description_contains: "display them in color",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--exclude".to_string()),
+                        value_name: Some("GLOB".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::Unknown,
+                        ..Default::default()
+                    },
+                    description_contains: "Skip any command-line file",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--exclude-dir".to_string()),
+                        value_name: Some("GLOB".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::Unknown,
+                        ..Default::default()
+                    },
+                    description_contains: "Skip any command-line directory",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--exclude-from".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::FilePath,
+                        ..Default::default()
+                    },
+                    description_contains: "globs read from FILE",
                 },
             ],
         );
@@ -2451,7 +3001,7 @@ None documented.
     fn parses_real_rm_fixture() {
         let cmd = parse_test_manpage("rm.1");
         assert_expected_subcommands(&cmd, &[]);
-        assert_contains_expected_args(
+        assert_expected_args(
             &cmd,
             &[
                 ExpectedArg {
@@ -2476,6 +3026,16 @@ None documented.
                 },
                 ExpectedArg {
                     arg: Arg {
+                        short: Some("-I".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "prompt once before removing more than three files",
+                },
+                ExpectedArg {
+                    arg: Arg {
                         short: None,
                         long: Some("--interactive".to_string()),
                         value_name: Some("WHEN".to_string()),
@@ -2483,6 +3043,47 @@ None documented.
                         ..Default::default()
                     },
                     description_contains: "prompt according to WHEN",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--one-file-system".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "skip any directory that is on a file system different",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--no-preserve-root".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "do not treat '/' specially",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--preserve-root".to_string()),
+                        value_name: Some("all".to_string()),
+                        num_args: Some("?".to_string()),
+                        value_enum: Some(vec!["all".to_string()]),
+                        ..Default::default()
+                    },
+                    description_contains: "do not remove '/'",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: None,
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "remove directories and their contents recursively",
                 },
                 ExpectedArg {
                     arg: Arg {
@@ -2494,6 +3095,46 @@ None documented.
                     },
                     description_contains: "remove directories and their contents recursively",
                 },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-d".to_string()),
+                        long: Some("--dir".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "remove empty directories",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: Some("--verbose".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "explain what is being done",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
+                },
             ],
         );
     }
@@ -2502,7 +3143,7 @@ None documented.
     fn parses_real_sed_fixture() {
         let cmd = parse_test_manpage("sed.1");
         assert_expected_subcommands(&cmd, &[]);
-        assert_contains_expected_args(
+        assert_expected_args(
             &cmd,
             &[
                 ExpectedArg {
@@ -2527,6 +3168,16 @@ None documented.
                 },
                 ExpectedArg {
                     arg: Arg {
+                        short: None,
+                        long: Some("--debug".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "annotate program execution",
+                },
+                ExpectedArg {
+                    arg: Arg {
                         short: Some("-e".to_string()),
                         long: Some("--expression".to_string()),
                         value_name: Some("script".to_string()),
@@ -2545,6 +3196,16 @@ None documented.
                         ..Default::default()
                     },
                     description_contains: "add the contents of script-file to the commands",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--follow-symlinks".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "follow symlinks when processing in place",
                 },
                 ExpectedArg {
                     arg: Arg {
@@ -2569,23 +3230,13 @@ None documented.
                 },
                 ExpectedArg {
                     arg: Arg {
-                        short: Some("-u".to_string()),
-                        long: Some("--unbuffered".to_string()),
-                        value_name: None,
-                        num_args: None,
-                        ..Default::default()
-                    },
-                    description_contains: "load minimal amounts of data",
-                },
-                ExpectedArg {
-                    arg: Arg {
                         short: None,
-                        long: Some("--sandbox".to_string()),
+                        long: Some("--posix".to_string()),
                         value_name: None,
                         num_args: None,
                         ..Default::default()
                     },
-                    description_contains: "operate in sandbox mode",
+                    description_contains: "disable all GNU extensions",
                 },
                 ExpectedArg {
                     arg: Arg {
@@ -2602,6 +3253,66 @@ None documented.
                         ..Default::default()
                     },
                     description_contains: "use extended regular expressions in the script",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-s".to_string()),
+                        long: Some("--separate".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "consider files as separate rather than as a single",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--sandbox".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "operate in sandbox mode",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-u".to_string()),
+                        long: Some("--unbuffered".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "load minimal amounts of data",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-z".to_string()),
+                        long: Some("--null-data".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "separate lines by NUL characters",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--help".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "display this help and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--version".to_string()),
+                        value_name: None,
+                        num_args: None,
+                        ..Default::default()
+                    },
+                    description_contains: "output version information and exit",
                 },
             ],
         );
@@ -3924,6 +4635,50 @@ Use asynchronous IO.
                     },
                     description_contains: "quoting style for file and member names",
                 },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--newer-mtime".to_string()),
+                        value_name: Some("DATE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::Unknown,
+                        ..Default::default()
+                    },
+                    description_contains: "Work on files whose data changed after the DATE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-N".to_string()),
+                        long: Some("--newer".to_string()),
+                        value_name: Some("DATE".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::Unknown,
+                        ..Default::default()
+                    },
+                    description_contains: "Only store files newer than DATE",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--suffix".to_string()),
+                        value_name: Some("STRING".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::Unknown,
+                        ..Default::default()
+                    },
+                    description_contains: "Backup before removal, override usual suffix",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--transform".to_string()),
+                        value_name: Some("EXPRESSION".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::Unknown,
+                        ..Default::default()
+                    },
+                    description_contains: "Use sed replace EXPRESSION to transform file names",
+                },
             ],
         );
     }
@@ -4483,7 +5238,7 @@ Use asynchronous IO.
     fn parses_real_env_fixture() {
         let cmd = parse_test_manpage("env.1");
         assert_expected_subcommands(&cmd, &[]);
-        assert_contains_expected_args(
+        assert_expected_args(
             &cmd,
             &[
                 ExpectedArg {
@@ -4604,7 +5359,7 @@ Use asynchronous IO.
         let cmd = parse_test_manpage("uname.1");
         assert_eq!(cmd.description.as_deref(), Some("print system information"));
         assert_expected_subcommands(&cmd, &[]);
-        assert_contains_expected_args(
+        assert_expected_args(
             &cmd,
             &[
                 ExpectedArg {
@@ -4704,7 +5459,7 @@ Use asynchronous IO.
         let cmd = parse_test_manpage("touch.1");
         assert_eq!(cmd.description.as_deref(), Some("change file timestamps"));
         assert_expected_subcommands(&cmd, &[]);
-        assert_contains_expected_args(
+        assert_expected_args(
             &cmd,
             &[
                 ExpectedArg {

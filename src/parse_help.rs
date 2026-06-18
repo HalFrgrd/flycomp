@@ -2737,6 +2737,48 @@ mod tests {
                     },
                     description_contains: "Set process priority to real-time",
                 },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--progress".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "progress counter",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--no-progress".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "progress counter",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--asyncio".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "asynchronous IO",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--no-asyncio".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "asynchronous IO",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--check".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "XXH64 integrity checksums",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--no-check".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "XXH64 integrity checksums",
+                },
             ],
         );
     }
@@ -5313,7 +5355,7 @@ Commands:
     fn test_env_help() {
         let cmd = parse_test_help("env");
         assert_eq!(cmd.name.as_deref(), Some("env"));
-        assert_contains_expected_args(
+        assert_expected_args(
             &cmd,
             &[
                 ExpectedArg {
