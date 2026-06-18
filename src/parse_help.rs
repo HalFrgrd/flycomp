@@ -441,6 +441,18 @@ fn is_valid_flag_name(name: &str) -> bool {
     true
 }
 
+fn is_valid_subcommand_name(name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    let first_char = name.chars().next().unwrap();
+    if !first_char.is_alphanumeric() {
+        return false;
+    }
+    name.chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == ':' || c == '.')
+}
+
 /// Try to parse a flag token like `-v`, `--verbose`, or `--output <FILE>`.
 /// Returns `(short, longs, value_name, num_args)`.
 pub(crate) fn parse_flag_tokens(
@@ -777,7 +789,7 @@ pub fn parse_help_clap(help: &str) -> Command {
             || (lower.contains("common") && lower.contains("commands"))
             || lower.contains("commands used in")
             || (lower.contains("commands")
-                && (trimmed.ends_with(':')
+                && ((trimmed.ends_with(':') && trimmed.split_whitespace().count() <= 3)
                     || lower.contains("commands are")
                     || (trimmed
                         .chars()
@@ -887,7 +899,10 @@ pub fn parse_help_clap(help: &str) -> Command {
                             {
                                 first_name_clean = first_name_clean[..space_pos].trim().to_string();
                             }
-                            if first_name_clean != "..." && !first_name_clean.is_empty() {
+                            if first_name_clean != "..."
+                                && !first_name_clean.is_empty()
+                                && is_valid_subcommand_name(&first_name_clean)
+                            {
                                 if sub_desc.is_none() && name_parts.len() > 1 {
                                     // Treat all comma-separated names as separate subcommands (e.g. npm)
                                     cmd.subcommands.push(Command {
@@ -907,7 +922,9 @@ pub fn parse_help_clap(help: &str) -> Command {
                                             alias_clean =
                                                 alias_clean[..space_pos].trim().to_string();
                                         }
-                                        if !alias_clean.is_empty() {
+                                        if !alias_clean.is_empty()
+                                            && is_valid_subcommand_name(&alias_clean)
+                                        {
                                             cmd.subcommands.push(Command {
                                                 name: Some(alias_clean),
                                                 ..Command::default()
@@ -933,7 +950,7 @@ pub fn parse_help_clap(help: &str) -> Command {
                                             }
                                             a
                                         })
-                                        .filter(|s| !s.is_empty())
+                                        .filter(|s| !s.is_empty() && is_valid_subcommand_name(s))
                                         .collect();
                                     cmd.subcommands.push(Command {
                                         name: Some(first_name_clean),
