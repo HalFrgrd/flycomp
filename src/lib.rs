@@ -609,6 +609,7 @@ pub fn extract_value_hint(value_name: Option<&str>, description: Option<&str>) -
     if desc_contains("environment variable")
         || desc_contains("env variable")
         || desc_contains("env-var")
+        || (desc_contains("variable") && desc_contains("environment"))
     {
         let is_non_env_var_name = if let Some(ref name) = name_lower {
             name == "string"
@@ -2915,6 +2916,7 @@ Options:
         {
             let mut f = std::fs::File::create(&cmd_path).unwrap();
             f.write_all(script.as_bytes()).unwrap();
+            f.sync_all().unwrap();
         }
 
         #[cfg(unix)]
@@ -2924,6 +2926,10 @@ Options:
             perms.set_mode(0o755);
             std::fs::set_permissions(&cmd_path, perms).unwrap();
         }
+
+        // Sleep briefly to ensure the OS/filesystem has fully released any write handles,
+        // avoiding "Text file busy (os error 26)" when executing it.
+        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let old_cwd = std::env::current_dir().unwrap();
         std::env::set_current_dir(&temp_dir).unwrap();
@@ -2950,6 +2956,7 @@ Options:
         {
             let mut f = std::fs::File::create(&cmd_path).unwrap();
             f.write_all(script.as_bytes()).unwrap();
+            f.sync_all().unwrap();
         }
 
         #[cfg(unix)]
@@ -2959,6 +2966,8 @@ Options:
             perms.set_mode(0o755);
             std::fs::set_permissions(&cmd_path, perms).unwrap();
         }
+
+        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let res = run_help(cmd_path.to_str().unwrap(), &[], false, 5000);
         let _ = std::fs::remove_dir_all(&temp_dir);
@@ -2997,6 +3006,7 @@ fi
         {
             let mut f = std::fs::File::create(&cmd_path).unwrap();
             f.write_all(script.as_bytes()).unwrap();
+            f.sync_all().unwrap();
         }
 
         #[cfg(unix)]
@@ -3006,6 +3016,8 @@ fi
             perms.set_mode(0o755);
             std::fs::set_permissions(&cmd_path, perms).unwrap();
         }
+
+        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let res = run_help(cmd_path.to_str().unwrap(), &[], false, 5000);
         let _ = std::fs::remove_dir_all(&temp_dir);
@@ -3489,6 +3501,10 @@ fi
         assert_eq!(extract_value_hint(Some("env-var"), None), ValueHint::EnvVar);
         assert_eq!(
             extract_value_hint(None, Some("read from environment variable")),
+            ValueHint::EnvVar
+        );
+        assert_eq!(
+            extract_value_hint(Some("NAME"), Some("remove variable from the environment")),
             ValueHint::EnvVar
         );
 

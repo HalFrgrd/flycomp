@@ -5263,6 +5263,7 @@ Use asynchronous IO.
                         long: Some("--unset".to_string()),
                         value_name: Some("NAME".to_string()),
                         num_args: Some("1".to_string()),
+                        value_hint: crate::ValueHint::EnvVar,
                         ..Default::default()
                     },
                     description_contains: "remove variable from the environment",
