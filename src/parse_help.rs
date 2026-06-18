@@ -229,11 +229,35 @@ fn is_like_value_name(t: &str) -> bool {
 }
 
 fn split_option_line(flag_part: &str) -> (&str, Option<String>) {
-    // First check if there is a double space, which is a very strong separator signal.
-    if let Some(pos) = flag_part.find("  ") {
-        let prefix = &flag_part[..pos];
-        let d = flag_part[pos..].trim().to_string();
-        let desc = if d.is_empty() { None } else { Some(d) };
+    let mut search_start = 0;
+    while let Some(pos) = flag_part[search_start..].find("  ") {
+        let actual_pos = search_start + pos;
+        let prefix = &flag_part[..actual_pos];
+        let remainder = flag_part[actual_pos..].trim();
+
+        // Check if the remainder starts with a flag (e.g., --long or -l)
+        let starts_with_flag = remainder.starts_with("--")
+            && remainder
+                .chars()
+                .nth(2)
+                .map_or(false, |c| c.is_alphanumeric() || c == '-');
+        let starts_with_short = remainder.starts_with('-')
+            && remainder
+                .chars()
+                .nth(1)
+                .map_or(false, |c| c.is_alphanumeric());
+
+        if starts_with_flag || starts_with_short {
+            // Skip this double space and keep searching
+            search_start = actual_pos + 2;
+            continue;
+        }
+
+        let desc = if remainder.is_empty() {
+            None
+        } else {
+            Some(remainder.to_string())
+        };
         return (prefix, desc);
     }
 
@@ -5467,6 +5491,397 @@ Commands:
                         ..Default::default()
                     },
                     description_contains: "output version information and exit",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn test_h5dump_help() {
+        let cmd = parse_test_help("h5dump");
+        assert_eq!(cmd.name.as_deref(), Some("h5dump"));
+        assert_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-h".to_string()),
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print a usage message and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-V".to_string()),
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print version number and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--enable-error-stack".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Prints messages from the HDF5 error stack",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-n".to_string()),
+                        long: Some("--contents".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print a list of the file contents and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-B".to_string()),
+                        long: Some("--superblock".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the content of the super block",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-H".to_string()),
+                        long: Some("--header".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the header only; no data is displayed",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-f".to_string()),
+                        long: Some("--filedriver".to_string()),
+                        value_name: Some("D".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Specify which driver to open the file with",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-o".to_string()),
+                        long: Some("--output".to_string()),
+                        value_name: Some("F".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Output raw data into file F",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-b".to_string()),
+                        long: Some("--binary".to_string()),
+                        value_name: Some("B".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Binary file output",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-O".to_string()),
+                        long: Some("--ddl".to_string()),
+                        value_name: Some("F".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Output ddl text into file F",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--s3-cred".to_string()),
+                        value_name: Some("cred".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Supply S3 authentication information",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--hdfs-attrs".to_string()),
+                        value_name: Some("attrs".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Supply configuration information for HDFS file access",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-a".to_string()),
+                        long: Some("--attribute".to_string()),
+                        value_name: Some("P".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the specified attribute",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-d".to_string()),
+                        long: Some("--dataset".to_string()),
+                        value_name: Some("P".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the specified dataset",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-g".to_string()),
+                        long: Some("--group".to_string()),
+                        value_name: Some("P".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the specified group and all members",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-l".to_string()),
+                        long: Some("--soft-link".to_string()),
+                        value_name: Some("P".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the value(s) of the specified soft link",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-t".to_string()),
+                        long: Some("--datatype".to_string()),
+                        value_name: Some("P".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the specified named datatype",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-N".to_string()),
+                        long: Some("--any_path".to_string()),
+                        value_name: Some("P".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print any attribute, dataset, group",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-A".to_string()),
+                        long: Some("--onlyattr".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the header and value of attributes",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--vds-view-first-missing".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Set the VDS bounds to first missing mapped elements",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--vds-gap-size".to_string()),
+                        value_name: Some("N".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Set the missing file gap size",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-i".to_string()),
+                        long: Some("--object-ids".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the object ids",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-p".to_string()),
+                        long: Some("--properties".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print dataset filters, storage layout and fill value",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-M".to_string()),
+                        long: Some("--packedbits".to_string()),
+                        value_name: Some("L".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Print packed bits as unsigned integers",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-R".to_string()),
+                        long: Some("--region".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print dataset pointed by region references",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-e".to_string()),
+                        long: Some("--escape".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Escape non printing characters",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: Some("--string".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print 1-byte integer datasets as ASCII",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-y".to_string()),
+                        long: Some("--noindex".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Do not print array indices with the data",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-m".to_string()),
+                        long: Some("--format".to_string()),
+                        value_name: Some("T".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Set the floating point output format",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-q".to_string()),
+                        long: Some("--sort_by".to_string()),
+                        value_name: Some("Q".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Sort groups and attributes by index Q",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-z".to_string()),
+                        long: Some("--sort_order".to_string()),
+                        value_name: Some("Z".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Sort groups and attributes by order Z",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--no-compact-subset".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Disable compact form of subsetting",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-w".to_string()),
+                        long: Some("--width".to_string()),
+                        value_name: Some("N".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Set the number of columns of output",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-x".to_string()),
+                        long: Some("--xml".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Output in XML using Schema",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-u".to_string()),
+                        long: Some("--use-dtd".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Output in XML using DTD",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-D".to_string()),
+                        long: Some("--xml-dtd".to_string()),
+                        value_name: Some("U".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Use the DTD or schema at U",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-X".to_string()),
+                        long: Some("--xml-ns".to_string()),
+                        value_name: Some("S".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Use qualified names n the XML",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-s".to_string()),
+                        long: Some("--start".to_string()),
+                        value_name: Some("START".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Offset of start of subsetting selection",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-S".to_string()),
+                        long: Some("--stride".to_string()),
+                        value_name: Some("STRIDE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Hyperslab stride",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-c".to_string()),
+                        long: Some("--count".to_string()),
+                        value_name: Some("COUNT".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Number of blocks to include in selection",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-k".to_string()),
+                        long: Some("--block".to_string()),
+                        value_name: Some("BLOCK".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Size of block in hyperslab",
                 },
             ],
         );

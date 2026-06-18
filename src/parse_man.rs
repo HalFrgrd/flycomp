@@ -656,16 +656,19 @@ fn parse_tagged_blocks(cmd: &mut Command, section: &str) -> bool {
     });
     static PD_MACRO: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
     let pd_macro = PD_MACRO.get_or_init(|| Regex::new(r"^\.PD(?:\s+\d+)?$").unwrap());
-    let mut lines = no_ix.lines().peekable();
+    let lines: Vec<&str> = no_ix.lines().collect();
+    let mut idx = 0;
 
-    while let Some(line) = lines.next() {
-        let trimmed = line.trim();
+    while idx < lines.len() {
+        let trimmed = lines[idx].trim();
         let is_tp = trimmed.starts_with(".TP") || trimmed.starts_with(".TQ");
         let is_hp = trimmed.starts_with(".HP");
         let is_ip = trimmed.starts_with(".IP ");
         if !is_tp && !is_ip && !is_hp {
+            idx += 1;
             continue;
         }
+        idx += 1;
 
         let mut opt_desc_first_line: Option<String> = None;
         let mut option_from_next_line = false;
@@ -680,18 +683,18 @@ fn parse_tagged_blocks(cmd: &mut Command, section: &str) -> bool {
             } else {
                 option_from_next_line = true;
                 let mut option_line = String::new();
-                while let Some(next) = lines.peek() {
-                    let next_trimmed = next.trim();
+                while idx < lines.len() {
+                    let next_trimmed = lines[idx].trim();
                     if next_trimmed.is_empty() {
-                        lines.next();
+                        idx += 1;
                         continue;
                     }
-                    option_line = (*next).to_string();
-                    lines.next();
+                    option_line = next_trimmed.to_string();
+                    idx += 1;
                     break;
                 }
-                while let Some(next) = lines.peek() {
-                    let next_trimmed = next.trim();
+                while idx < lines.len() {
+                    let next_trimmed = lines[idx].trim();
                     if next_trimmed.is_empty()
                         || !next_trimmed.starts_with('.')
                         || structural_macro.is_match(next_trimmed)
@@ -700,7 +703,7 @@ fn parse_tagged_blocks(cmd: &mut Command, section: &str) -> bool {
                     }
                     option_line.push(' ');
                     option_line.push_str(next_trimmed);
-                    lines.next();
+                    idx += 1;
                 }
                 let (opt, desc) = split_option_and_desc(&option_line);
                 if let Some(d) = desc {
@@ -710,36 +713,63 @@ fn parse_tagged_blocks(cmd: &mut Command, section: &str) -> bool {
             }
         } else {
             let mut option_line = String::new();
-            while let Some(next) = lines.peek() {
-                let next_trimmed = next.trim();
+            while idx < lines.len() {
+                let next_trimmed = lines[idx].trim();
                 if next_trimmed.is_empty() {
-                    lines.next();
+                    idx += 1;
                     continue;
                 }
-                option_line = (*next).to_string();
-                lines.next();
+                option_line = next_trimmed.to_string();
+                idx += 1;
                 break;
             }
-            while let Some(next) = lines.peek() {
-                let next_trimmed = next.trim();
-                if next_trimmed.is_empty()
-                    || !next_trimmed.starts_with('.')
-                    || structural_macro.is_match(next_trimmed)
-                {
+            while idx < lines.len() {
+                let next_trimmed = lines[idx].trim();
+                if next_trimmed.is_empty() {
+                    idx += 1;
+                    continue;
+                }
+                if structural_macro.is_match(next_trimmed) {
                     break;
                 }
+
+                // Allow "or" (or "," or "|") separator if followed by a flag/macro
+                let is_separator = next_trimmed.eq_ignore_ascii_case("or")
+                    || next_trimmed == ","
+                    || next_trimmed == "|";
+                if !next_trimmed.starts_with('.') {
+                    let mut is_followed_by_flag = false;
+                    if is_separator {
+                        let mut look_idx = idx + 1;
+                        while look_idx < lines.len() {
+                            let look_trimmed = lines[look_idx].trim();
+                            if look_trimmed.is_empty() {
+                                look_idx += 1;
+                                continue;
+                            }
+                            if look_trimmed.starts_with('.') || look_trimmed.starts_with('-') {
+                                is_followed_by_flag = true;
+                            }
+                            break;
+                        }
+                    }
+                    if !is_followed_by_flag {
+                        break;
+                    }
+                }
+
                 option_line.push(' ');
                 option_line.push_str(next_trimmed);
-                lines.next();
+                idx += 1;
             }
             option_line
         };
 
         if is_ip && !option_from_next_line {
-            while let Some(next) = lines.peek() {
-                let next_trimmed = next.trim();
+            while idx < lines.len() {
+                let next_trimmed = lines[idx].trim();
                 if next_trimmed.is_empty() || pd_macro.is_match(next_trimmed) {
-                    lines.next();
+                    idx += 1;
                     continue;
                 }
                 if next_trimmed.starts_with(".IP ") {
@@ -749,7 +779,7 @@ fn parse_tagged_blocks(cmd: &mut Command, section: &str) -> bool {
                             .replace(next_trimmed.trim_start_matches(".IP").trim(), "")
                             .into_owned(),
                     );
-                    lines.next();
+                    idx += 1;
                     continue;
                 }
                 break;
@@ -760,14 +790,14 @@ fn parse_tagged_blocks(cmd: &mut Command, section: &str) -> bool {
         if let Some(first) = opt_desc_first_line {
             desc_lines.push(first);
         }
-        while let Some(next) = lines.peek() {
-            let next_trimmed = next.trim();
+        while idx < lines.len() {
+            let next_trimmed = lines[idx].trim();
             if next_trimmed.is_empty() || pd_macro.is_match(next_trimmed) {
-                lines.next();
+                idx += 1;
                 continue;
             }
             if is_hp && (next_trimmed == ".IP" || next_trimmed.starts_with(".IP ")) {
-                lines.next();
+                idx += 1;
                 continue;
             }
             if conditional_structural_macro.is_match(next_trimmed) {
@@ -789,8 +819,8 @@ fn parse_tagged_blocks(cmd: &mut Command, section: &str) -> bool {
             {
                 break;
             }
-            desc_lines.push((*next).to_string());
-            lines.next();
+            desc_lines.push(lines[idx].to_string());
+            idx += 1;
         }
 
         found |= add_option(cmd, &option_name, &desc_lines.join("\n"));
@@ -5350,6 +5380,232 @@ Use asynchronous IO.
                         ..Default::default()
                     },
                     description_contains: "output version information and exit",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn parses_real_h5dump_fixture() {
+        let cmd = parse_test_manpage("h5dump.1");
+        assert_eq!(cmd.name.as_deref(), Some("h5dump"));
+        assert_expected_subcommands(&cmd, &[]);
+        assert_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-h".to_string()),
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print a usage message and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-B".to_string()),
+                        long: Some("--bootblock".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the content of the boot block",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-H".to_string()),
+                        long: Some("--header".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the header only; no data is displayed",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-A".to_string()),
+                        long: None,
+                        ..Default::default()
+                    },
+                    description_contains: "Print the header and value of attributes",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-i".to_string()),
+                        long: Some("--object-ids".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the object ids",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: Some("--string".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print 1-bytes integer datasets as ASCII",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-V".to_string()),
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print version number and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-a".to_string()),
+                        long: Some("--attribute".to_string()),
+                        value_name: Some("P".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the specified attribute",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-d".to_string()),
+                        long: Some("--dataset".to_string()),
+                        value_name: Some("P".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the specified dataset",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-f".to_string()),
+                        long: Some("--filedriver".to_string()),
+                        value_name: Some("D".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Specify which driver to open the file with",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-g".to_string()),
+                        long: Some("--group".to_string()),
+                        value_name: Some("P".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the specified group and all members",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-l".to_string()),
+                        long: Some("--soft-link".to_string()),
+                        value_name: Some("P".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the value(s) of the specified soft link",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-o".to_string()),
+                        long: Some("--output".to_string()),
+                        value_name: Some("F".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Output raw data into file F",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-t".to_string()),
+                        long: Some("--datatype".to_string()),
+                        value_name: Some("T".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the specified named datatype",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-w".to_string()),
+                        long: Some("--width".to_string()),
+                        value_name: Some("N".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Set the number of columns of output",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-x".to_string()),
+                        long: Some("--xml".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Output XML using XML schema",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-u".to_string()),
+                        long: Some("--use-dtd".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Output XML using XML DTD",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-D".to_string()),
+                        long: Some("--xml-dtd".to_string()),
+                        value_name: Some("U".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "refer to the DTD or schema",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-X".to_string()),
+                        long: Some("--xml-dns".to_string()),
+                        value_name: Some("S".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "use qualified names in the XML",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-s".to_string()),
+                        long: Some("--start".to_string()),
+                        value_name: Some("L".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Offset of start of subsetting selection",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-S".to_string()),
+                        long: Some("--stride".to_string()),
+                        value_name: Some("L".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Hyperslab stride",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-c".to_string()),
+                        long: Some("--count".to_string()),
+                        value_name: Some("L".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Number of blocks to include in the selection",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-k".to_string()),
+                        long: Some("--block".to_string()),
+                        value_name: Some("L".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Size of block in hyperslab",
                 },
             ],
         );
