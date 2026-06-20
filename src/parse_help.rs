@@ -491,6 +491,36 @@ pub(crate) fn parse_flag_tokens(
 
     // Tokenise: split on ", " first, then whitespace
     let pieces: Vec<&str> = token.split_whitespace().collect();
+
+    // First pass to extract value_name from pieces
+    let mut extracted_val = None;
+    for &piece in &pieces {
+        if piece.starts_with("--") {
+            let piece_str = piece.to_string();
+            if let Some(start_bracket) = piece_str.find("[=") {
+                if let Some(end_bracket) = piece_str.rfind(']') {
+                    if end_bracket > start_bracket {
+                        let val = &piece_str[start_bracket + 2..end_bracket];
+                        extracted_val = Some(val.trim_matches(|c| c == '<' || c == '>').to_string());
+                    }
+                }
+            }
+            if extracted_val.is_none() {
+                if let Some((_, val)) = piece_str.split_once('=') {
+                    extracted_val = Some(val.trim_matches(|c| c == '<' || c == '>').to_string());
+                }
+            }
+        } else if piece.starts_with('<') || piece.starts_with('[') {
+            if extracted_val.is_none() {
+                extracted_val = Some(
+                    piece
+                        .trim_matches(|c| c == '<' || c == '>' || c == '[' || c == ']')
+                        .to_string(),
+                );
+            }
+        }
+    }
+
     for &piece in &pieces {
         if piece.starts_with("--") {
             // May be "--flag" or "--flag=<VAL>" or "--flag[=<VAL>]"
@@ -563,9 +593,45 @@ pub(crate) fn parse_flag_tokens(
                 }
             }
 
+            let chars: Vec<char> = short_candidate.chars().collect();
+            let mut is_wn_edgecase = false;
+            if chars.len() >= 2 && chars[0].is_alphabetic() {
+                if let Some(ref val_name) = extracted_val {
+                    if short_candidate.ends_with(val_name) && short_candidate.len() > val_name.len() {
+                        let prefix = &short_candidate[..short_candidate.len() - val_name.len()];
+                        if prefix.chars().count() == 1 {
+                            short = Some(format!("-{prefix}"));
+                            if value_name.is_none() {
+                                value_name = Some(val_name.clone());
+                                num_args = Some("1".to_string());
+                            }
+                            is_wn_edgecase = true;
+                        }
+                    }
+                } else {
+                    let suffix: String = chars[1..].iter().collect();
+                    if !suffix.is_empty() && suffix.chars().all(|c| c.is_uppercase() && c.is_alphabetic()) {
+                        short = Some(format!("-{}", chars[0]));
+                        if value_name.is_none() {
+                            value_name = Some(suffix);
+                            num_args = Some("1".to_string());
+                        }
+                        is_wn_edgecase = true;
+                    }
+                }
+            }
+
             let count = short_candidate.chars().count();
-            if count == 1 || (count == 2 && short_candidate.ends_with('#')) || is_bracketed_short {
-                short = Some(format!("-{short_candidate}"));
+            if is_wn_edgecase {
+                // Handled
+            } else if count == 1
+                || (count == 2 && short_candidate.ends_with('#'))
+                || is_bracketed_short
+            {
+                let candidate_short = format!("-{short_candidate}");
+                if is_valid_flag_name(&candidate_short) {
+                    short = Some(candidate_short);
+                }
             } else if count > 1 {
                 let l = format!("--{short_candidate}");
                 if !fallback_longs.contains(&l) {
@@ -5882,6 +5948,174 @@ Commands:
                         ..Default::default()
                     },
                     description_contains: "Size of block in hyperslab",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn test_h5ls_help() {
+        let cmd = parse_test_help("h5ls");
+        assert_eq!(cmd.name.as_deref(), Some("h5ls"));
+        assert_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-h".to_string()),
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print a usage message and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-a".to_string()),
+                        long: Some("--address".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print raw data address",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-d".to_string()),
+                        long: Some("--data".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the values of datasets",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--enable-error-stack".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Prints messages from the HDF5 error stack",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--follow-symlinks".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Follow symbolic links",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--no-dangling-links".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Check for any symbolic links",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-f".to_string()),
+                        long: Some("--full".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print full path names",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-g".to_string()),
+                        long: Some("--group".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Show information about a group",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-l".to_string()),
+                        long: Some("--label".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Label members of compound datasets",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: Some("--recursive".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "List all groups recursively",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-s".to_string()),
+                        long: Some("--string".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print 1-byte integer datasets",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-S".to_string()),
+                        long: Some("--simple".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Use a machine-readable output format",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-w".to_string()),
+                        long: Some("--width".to_string()),
+                        value_name: Some("N".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Set the number of columns of output",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: Some("--verbose".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Generate more verbose output",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-V".to_string()),
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print version number and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--vfd".to_string()),
+                        value_name: Some("DRIVER".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Use the specified virtual file driver",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-x".to_string()),
+                        long: Some("--hexdump".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Show raw data in hexadecimal format",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-E".to_string()),
+                        long: Some("--external".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Follow external links",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-e".to_string()),
+                        long: Some("--errors".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Show all HDF5 error reporting",
                 },
             ],
         );

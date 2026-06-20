@@ -45,7 +45,10 @@ pub fn is_sandboxing_available() -> Option<String> {
     {
         Ok(mut child) => {
             let _ = child.wait();
-            Some("bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --unshare-all --".to_string())
+            Some(
+                "bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --unshare-all --"
+                    .to_string(),
+            )
         }
         _ => None,
     }
@@ -3739,8 +3742,10 @@ fi
     fn test_is_sandboxing_available() {
         let res = is_sandboxing_available();
         if let Some(s) = res {
-            assert_eq!(s, "bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --unshare-all --");
+            assert_eq!(
+                s,
+                "bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --unshare-all --"
+            );
         }
     }
 }
-

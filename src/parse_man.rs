@@ -279,7 +279,21 @@ fn find_value_type(remainder: &str) -> (Option<String>, Option<String>) {
     (None, None)
 }
 
-fn parse_alias(alias: &str) -> Option<ParsedOption> {
+fn extract_val_from_alias(alias: &str) -> Option<String> {
+    let alias = alias.trim();
+    static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let caps = RE
+        .get_or_init(|| {
+            Regex::new(r"^(?P<option>--?(?:\[no\-?\])?[A-Za-z0-9#][A-Za-z0-9_-]*)(?P<rest>.*)$")
+                .unwrap()
+        })
+        .captures(alias)?;
+    let rest = caps.name("rest").map(|m| m.as_str()).unwrap_or("");
+    let (value_name, _) = find_value_type(rest);
+    value_name
+}
+
+fn parse_alias(alias: &str, shared_value_name: Option<&str>) -> Option<ParsedOption> {
     let alias = alias.trim();
     // Support options that contain brackets for negation, e.g. --[no-]color or --[no]color.
     static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
@@ -308,7 +322,39 @@ fn parse_alias(alias: &str) -> Option<ParsedOption> {
     } else if option.len() == 2 {
         parsed.short = Some(option.to_string());
     } else {
-        parsed.long = Some(format!("--{}", &option[1..]));
+        let mut handled = false;
+        let stripped = option.trim_start_matches('-');
+        if !option.starts_with("--") && stripped.len() >= 2 {
+            let chars: Vec<char> = stripped.chars().collect();
+            if chars[0].is_alphabetic() {
+                if let Some(val_name) = shared_value_name {
+                    if stripped.ends_with(val_name) && stripped.len() > val_name.len() {
+                        let prefix = &stripped[..stripped.len() - val_name.len()];
+                        if prefix.chars().count() == 1 {
+                            parsed.short = Some(format!("-{prefix}"));
+                            if parsed.value_name.is_none() {
+                                parsed.value_name = Some(val_name.to_string());
+                                parsed.num_args = Some("1".to_string());
+                            }
+                            handled = true;
+                        }
+                    }
+                } else {
+                    let suffix: String = chars[1..].iter().collect();
+                    if !suffix.is_empty() && suffix.chars().all(|c| c.is_uppercase() && c.is_alphabetic()) {
+                        parsed.short = Some(format!("-{}", chars[0]));
+                        if parsed.value_name.is_none() {
+                            parsed.value_name = Some(suffix);
+                            parsed.num_args = Some("1".to_string());
+                        }
+                        handled = true;
+                    }
+                }
+            }
+        }
+        if !handled {
+            parsed.long = Some(format!("--{}", &option[1..]));
+        }
     }
 
     Some(parsed)
@@ -321,8 +367,16 @@ fn parse_option_declaration(option_text: &str, cmd_name: &str) -> Vec<ParsedOpti
     let mut parsed = Vec::new();
     let mut pending_short: Option<ParsedOption> = None;
 
+    let mut shared_value_name = None;
+    for alias in &aliases {
+        if let Some(val) = extract_val_from_alias(alias) {
+            shared_value_name = Some(val);
+            break;
+        }
+    }
+
     for alias in aliases {
-        let Some(current) = parse_alias(&alias) else {
+        let Some(current) = parse_alias(&alias, shared_value_name.as_deref()) else {
             continue;
         };
 
@@ -5606,6 +5660,133 @@ Use asynchronous IO.
                         ..Default::default()
                     },
                     description_contains: "Size of block in hyperslab",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn parses_real_h5ls_fixture() {
+        let cmd = parse_test_manpage("h5ls.1");
+        assert_eq!(cmd.name.as_deref(), Some("h5ls"));
+        assert_expected_subcommands(&cmd, &[]);
+        assert_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-h".to_string()),
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print a usage message and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-a".to_string()),
+                        long: Some("--address".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print addresses for raw data",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-d".to_string()),
+                        long: Some("--data".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print the values of datasets",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-e".to_string()),
+                        long: Some("--errors".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Show all HDF5 error reporting",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-f".to_string()),
+                        long: Some("--full".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print full path names instead of base names",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-g".to_string()),
+                        long: Some("--group".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Show information about a group, not its contents",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-l".to_string()),
+                        long: Some("--label".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Label members of compound datasets",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-r".to_string()),
+                        long: Some("--recursive".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "List all groups recursively, avoiding cycles",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-s".to_string()),
+                        long: Some("--string".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print 1-bytes integer datasets as ASCII",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-S".to_string()),
+                        long: Some("--simple".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Use a machine-readable output format",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-w".to_string()),
+                        long: Some("--width".to_string()),
+                        value_name: Some("N".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_hint: ValueHint::Integral,
+                        ..Default::default()
+                    },
+                    description_contains: "Set the number of columns of output",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-v".to_string()),
+                        long: Some("--verbose".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Generate more verbose output",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-V".to_string()),
+                        long: Some("--version".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Print version number and exit",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-x".to_string()),
+                        long: Some("--hexdump".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Show raw data in hexadecimal format",
                 },
             ],
         );
