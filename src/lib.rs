@@ -35,7 +35,7 @@ pub fn reset_stats() {
     HELP_RUNS.with(|c| c.set(0));
 }
 
-pub fn is_sandboxing_available() -> bool {
+pub fn is_sandboxing_available() -> Option<String> {
     // Test if bwrap exists in PATH by trying to spawn it with --version
     match std::process::Command::new("bwrap")
         .arg("--version")
@@ -45,9 +45,9 @@ pub fn is_sandboxing_available() -> bool {
     {
         Ok(mut child) => {
             let _ = child.wait();
-            true
+            Some("bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --unshare-all --".to_string())
         }
-        _ => false,
+        _ => None,
     }
 }
 
@@ -2143,7 +2143,7 @@ fn run_help_attempt(
         }
     }
 
-    let use_sandbox = sandbox && is_sandboxing_available();
+    let use_sandbox = sandbox && is_sandboxing_available().is_some();
     if sandbox && !use_sandbox {
         log::warn!("bubblewrap (bwrap) not found in PATH; running completion check unsandboxed.");
     }
@@ -3734,4 +3734,13 @@ fi
                 .any(|a| a.long.as_deref() == Some("--foo"))
         );
     }
+
+    #[test]
+    fn test_is_sandboxing_available() {
+        let res = is_sandboxing_available();
+        if let Some(s) = res {
+            assert_eq!(s, "bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --unshare-all --");
+        }
+    }
 }
+
