@@ -247,7 +247,60 @@ impl Command {
         }
     }
 
+    pub fn resolve_alias_args(&mut self) {
+        let mut aliases_to_merge = Vec::new();
+        let mut i = 0;
+        while i < self.args.len() {
+            let arg = &self.args[i];
+            if arg.short.is_some() && arg.long.is_none() {
+                if let Some(desc) = &arg.description {
+                    let desc_lower = desc.to_lowercase();
+                    if let Some(pos) = desc_lower.find("alias for --") {
+                        let target_long = &desc_lower[pos + "alias for --".len()..];
+                        let target_long =
+                            target_long.split_whitespace().next().unwrap_or("").trim();
+                        let target_long = target_long.trim_end_matches(|c: char| {
+                            c.is_ascii_punctuation() && c != '_' && c != '-'
+                        });
+                        if !target_long.is_empty() {
+                            aliases_to_merge.push((i, format!("--{}", target_long)));
+                        }
+                    }
+                }
+            }
+            i += 1;
+        }
+
+        let mut to_remove = std::collections::HashSet::new();
+        for (alias_idx, target_long) in aliases_to_merge {
+            if let Some(target_idx) = self
+                .args
+                .iter()
+                .position(|a| a.long.as_ref() == Some(&target_long))
+            {
+                let short_val = self.args[alias_idx].short.clone();
+                self.args[target_idx].short = short_val;
+                to_remove.insert(alias_idx);
+            }
+        }
+
+        if !to_remove.is_empty() {
+            let mut new_args = Vec::new();
+            for (idx, arg) in self.args.drain(..).enumerate() {
+                if !to_remove.contains(&idx) {
+                    new_args.push(arg);
+                }
+            }
+            self.args = new_args;
+        }
+
+        for sub in &mut self.subcommands {
+            sub.resolve_alias_args();
+        }
+    }
+
     pub fn deduplicate_args(&mut self) {
+        self.resolve_alias_args();
         let mut unique_args: Vec<Arg> = Vec::new();
         for arg in std::mem::take(&mut self.args) {
             let mut found_idx = None;

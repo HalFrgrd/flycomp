@@ -17,7 +17,7 @@ fn detect_format(help: &str) -> HelpFormat {
         return HelpFormat::Ebnf;
     }
 
-    let has_usage = help.contains("Usage:") || help.contains("USAGE");
+    let has_usage = help.contains("Usage:") || help.contains("USAGE") || help.contains("Usage of ");
 
     let has_commands_section = help.lines().any(|l| {
         let trimmed = l.trim();
@@ -77,6 +77,7 @@ fn detect_format(help: &str) -> HelpFormat {
                     || lower.contains("selection")
                     || lower.contains("miscellaneous")
                     || lower.contains("interpretation")
+                    || lower.starts_with("usage of ")
             };
         is_options
     });
@@ -501,7 +502,8 @@ pub(crate) fn parse_flag_tokens(
                 if let Some(end_bracket) = piece_str.rfind(']') {
                     if end_bracket > start_bracket {
                         let val = &piece_str[start_bracket + 2..end_bracket];
-                        extracted_val = Some(val.trim_matches(|c| c == '<' || c == '>').to_string());
+                        extracted_val =
+                            Some(val.trim_matches(|c| c == '<' || c == '>').to_string());
                     }
                 }
             }
@@ -597,7 +599,8 @@ pub(crate) fn parse_flag_tokens(
             let mut is_wn_edgecase = false;
             if chars.len() >= 2 && chars[0].is_alphabetic() {
                 if let Some(ref val_name) = extracted_val {
-                    if short_candidate.ends_with(val_name) && short_candidate.len() > val_name.len() {
+                    if short_candidate.ends_with(val_name) && short_candidate.len() > val_name.len()
+                    {
                         let prefix = &short_candidate[..short_candidate.len() - val_name.len()];
                         if prefix.chars().count() == 1 {
                             short = Some(format!("-{prefix}"));
@@ -610,7 +613,11 @@ pub(crate) fn parse_flag_tokens(
                     }
                 } else {
                     let suffix: String = chars[1..].iter().collect();
-                    if !suffix.is_empty() && suffix.chars().all(|c| c.is_uppercase() && c.is_alphabetic()) {
+                    if !suffix.is_empty()
+                        && suffix
+                            .chars()
+                            .all(|c| c.is_uppercase() && c.is_alphabetic())
+                    {
                         short = Some(format!("-{}", chars[0]));
                         if value_name.is_none() {
                             value_name = Some(suffix);
@@ -814,32 +821,38 @@ pub fn parse_help_clap(help: &str) -> Command {
     let desc_col = detect_description_column(&lines);
     let mut cmd = Command::default();
 
-    if let Some(usage_pos) = lines
-        .iter()
-        .position(|l| l.trim_start().to_lowercase().starts_with("usage:"))
-    {
+    if let Some(usage_pos) = lines.iter().position(|l| {
+        let lower = l.trim_start().to_lowercase();
+        lower.starts_with("usage:") || lower.starts_with("usage of ")
+    }) {
         let mut full_usage = lines[usage_pos].trim_start().to_string();
         let mut j = usage_pos + 1;
         while j < lines.len() && !lines[j].trim().is_empty() && indent_of(lines[j]) > 0 {
+            let trimmed_next = lines[j].trim();
+            if trimmed_next.starts_with('-') {
+                break;
+            }
             full_usage.push(' ');
-            full_usage.push_str(lines[j].trim());
+            full_usage.push_str(trimmed_next);
             j += 1;
         }
 
         let after = if full_usage.to_lowercase().starts_with("usage:") {
             &full_usage["usage:".len()..]
+        } else if full_usage.to_lowercase().starts_with("usage of ") {
+            &full_usage["usage of ".len()..]
         } else {
             &full_usage
         };
-        let after = after.trim();
+        let after = after.trim().trim_end_matches(':').trim();
         if let Some(name_part) = after.split_whitespace().next() {
-            cmd.name = Some(name_part.to_string());
+            cmd.name = Some(name_part.trim_end_matches(':').to_string());
         } else {
             for next_line in &lines[usage_pos + 1..] {
                 let t = next_line.trim();
                 if !t.is_empty() {
                     if let Some(name_part) = t.split_whitespace().next() {
-                        cmd.name = Some(name_part.to_string());
+                        cmd.name = Some(name_part.trim_end_matches(':').to_string());
                     }
                     break;
                 }
@@ -849,7 +862,10 @@ pub fn parse_help_clap(help: &str) -> Command {
 
     let usage_pos = lines
         .iter()
-        .position(|l| l.trim_start().to_lowercase().starts_with("usage:"))
+        .position(|l| {
+            let lower = l.trim_start().to_lowercase();
+            lower.starts_with("usage:") || lower.starts_with("usage of ")
+        })
         .unwrap_or(0);
     for line in &lines[..usage_pos] {
         let t = line.trim();
@@ -1080,6 +1096,7 @@ pub fn parse_help_clap(help: &str) -> Command {
                     || lower.contains("selection")
                     || lower.contains("miscellaneous")
                     || lower.contains("interpretation")
+                    || lower.starts_with("usage of ")
             };
 
         if is_options_section {
@@ -6699,6 +6716,49 @@ OPTIONS:
                         ..Default::default()
                     },
                     description_contains: "version information",
+                },
+            ],
+        );
+    }
+
+    #[test]
+    fn test_agy_help() {
+        let cmd = parse_help(&read_fixture(&["agy"]));
+        assert_eq!(cmd.name.as_deref(), Some("agy"));
+
+        assert_contains_subcommands(
+            &cmd,
+            &[
+                ("changelog", "Show changelog and release notes"),
+                ("help", "Show help for subcommands"),
+                ("install", "Configure environment paths and shell settings"),
+                ("models", "List available models"),
+                (
+                    "plugin",
+                    "Manage plugins (install, uninstall, list, enable, disable)",
+                ),
+                ("plugins", "Alias for plugin"),
+                ("update", "Update CLI"),
+            ],
+        );
+
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--add-dir".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Add a directory to the workspace",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-c".to_string()),
+                        long: Some("--continue".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Continue the most recent conversation",
                 },
             ],
         );

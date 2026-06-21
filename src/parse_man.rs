@@ -341,7 +341,11 @@ fn parse_alias(alias: &str, shared_value_name: Option<&str>) -> Option<ParsedOpt
                     }
                 } else {
                     let suffix: String = chars[1..].iter().collect();
-                    if !suffix.is_empty() && suffix.chars().all(|c| c.is_uppercase() && c.is_alphabetic()) {
+                    if !suffix.is_empty()
+                        && suffix
+                            .chars()
+                            .all(|c| c.is_uppercase() && c.is_alphabetic())
+                    {
                         parsed.short = Some(format!("-{}", chars[0]));
                         if parsed.value_name.is_none() {
                             parsed.value_name = Some(suffix);
