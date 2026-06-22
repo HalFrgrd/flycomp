@@ -13,33 +13,32 @@
 </div>
 
 When you use terminal applications, writing completion scripts manually for every shell (Bash, Zsh, Fish, etc.) is tedious and error-prone. `flycomp` solves this by automatically analyzing:
-- Help command outputs (`--help` or `-h`) from tools written in `clap` (Rust), `argparse` (Python), EBNF syntax (like `ip`), or generic layout structures.
-- Groff-formatted system manual (`man`) pages.
+- [man pages](https://man7.org/linux/man-pages/)
+- Help command outputs (`--help` or `help`) for the main command and subcommands
 
-Using these parsed command structures, `flycomp` dynamically compiles them into highly functional, robust shell completion scripts via `clap_complete` or outputs them in a structured JSON representation for use in other line editors (such as [flyline](https://github.com/HalFrgrd/flyline)).
+Using these parsed command structures, `flycomp` dynamically generates shell completion scripts via `clap_complete` or outputs them in a structured JSON representation. `flycomp` is currently in use in my [flyline](https://github.com/HalFrgrd/flyline#automatic-completion-synthesis-flycomp) project.
 
-## Who is it for?
-1. **Shell Plugin/TUI Developers**: You need a unified, programmatic way to extract command arguments, flags, types, subcommands, and descriptions to provide rich context completion in line-editors.
-2. **System Administrators/CLI Users**: You want to quickly bootstrap completion scripts for arbitrary tools that don't ship with native shell completion files.
-3. **Rust Developers**: You want to leverage a highly optimized parsing library to parse help text into strongly-typed `Command` structures.
 
 ---
 
 # Installation
 
-### Cargo
-You can install the `flycomp` binary globally using cargo:
+### Quick install: `install.sh`
+
+> [!TIP]
+> No need for `sudo`!
 ```bash
-cargo install --path .
+curl -sSfL https://raw.githubusercontent.com/HalFrgrd/flycomp/master/install.sh | sh
 ```
-Or build from source:
-```bash
-cargo build --release
-```
-The built binary will be available at `./target/release/flycomp`.
 
 ### Pre-built Releases
 Download the pre-compiled binary for your architecture from the [Releases page](https://github.com/HalFrgrd/flycomp/releases).
+
+### Cargo
+You can install the `flycomp` binary after cloning the repo using cargo:
+```bash
+cargo install --path .
+```
 
 ---
 
@@ -67,77 +66,17 @@ flycomp docker --recurse-limit 2
 ### Synthesis Strategies
 You can control how `flycomp` gathers command metadata via the `--strategy` flag:
 - `man-page-or-run-help` (Default): Attempts to parse the command's man page if available, falling back to executing the binary with `--help` if needed.
-- `man-page`: Only parse the command's groff/man page files.
+- `man-page`: Only parse the command's man page files.
 - `run-help`: Directly execute the command with `--help` and parse its stdout/stderr.
 - `man-page-then-run-help`: Parse the man page first, then run with `--help` to overlay/enrich the parsed structure.
 
----
-
-# How It Works
-
-### 1. Secure Execution Sandboxing
-Because executing arbitrary binaries with `--help` can carry risk, `flycomp` automatically executes command-line parsing inside a secure **Bubblewrap** (`bwrap`) sandbox environment if available on the system.
-If you need to bypass sandboxing (e.g. inside an already isolated container), use the `--no-sandbox` option:
-```bash
-flycomp my-custom-binary --no-sandbox
-```
-
-### 2. Specialized Help Output Parsers
-`flycomp` contains custom parsers tailored for various command-line output layouts:
-- **Clap**: Detects structures outputted by Rust's `clap` library, mapping sections like `USAGE`, `Options:`, and `Commands:`.
-- **Argparse**: Maps Python's `argparse` layout, grouping positional vs optional parameters.
-- **EBNF**: Handles complex argument layout structures (such as `ip` command listings).
-- **Generic**: Standard pattern-matching on lines and sections for tools that do not belong to the above categories.
-
-### 3. Groff Page Parser
-The `man` page parser cleans raw troff/groff control formatting, strips font escape sequences (like `\fB`, `\fI`, etc.), replaces special macro typography, and parses the standard GNU options layout to construct precise command definitions.
+Flycomp tries to use [bwrap](github.com/containers/bubblewrap) when running `--help` for a (sub)command.
 
 ---
 
-# Programmatic Library API (Rust)
+# Development and Testing
 
-Add `flycomp` as a dependency in your `Cargo.toml`:
-```toml
-[dependencies]
-flycomp = { git = "https://github.com/HalFrgrd/flycomp.git" }
-```
-
-You can then parse raw help strings or generate shell completions directly in your Rust application:
-
-```rust
-use flycomp::{parse_help, OutputFormat};
-
-fn main() {
-    let help_text = "
-Usage: mytool [OPTIONS]
-
-Options:
-  -v, --verbose  Enable verbose logs
-  -p <PATH>      Output destination path
-";
-    
-    // Parse raw text into structured Command models
-    let cmd = parse_help(help_text).unwrap();
-    println!("Parsed command: {:?}", cmd.name);
-    
-    for arg in cmd.args {
-        println!("  Flag: {:?}, Description: {:?}", arg.long, arg.description);
-    }
-}
-```
-
----
-
-# Development & Testing
-
-### Running Tests
-Execute unit and integration tests (which verify the parsing on real-world fixtures for `git`, `curl`, `apt`, `tar`, etc.):
+Add test man pages / help texts then run:
 ```bash
 cargo test --release
-```
-
-### Generating Demos
-You can generate the demo GIF and SVG recordings using the defined docker bake target:
-```bash
-docker buildx bake demos
 ```

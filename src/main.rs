@@ -1,8 +1,39 @@
 use clap::Parser;
 
+fn cli_styles() -> clap::builder::Styles {
+    clap::builder::Styles::styled()
+        .header(
+            clap::builder::styling::AnsiColor::Yellow.on_default()
+                | clap::builder::styling::Effects::BOLD,
+        )
+        .usage(
+            clap::builder::styling::AnsiColor::Yellow.on_default()
+                | clap::builder::styling::Effects::BOLD,
+        )
+        .literal(
+            clap::builder::styling::AnsiColor::Green.on_default()
+                | clap::builder::styling::Effects::BOLD,
+        )
+        .placeholder(clap::builder::styling::AnsiColor::White.on_default())
+        .error(
+            clap::builder::styling::AnsiColor::Red.on_default()
+                | clap::builder::styling::Effects::BOLD,
+        )
+        .valid(
+            clap::builder::styling::AnsiColor::Green.on_default()
+                | clap::builder::styling::Effects::BOLD,
+        )
+        .invalid(
+            clap::builder::styling::AnsiColor::Red.on_default()
+                | clap::builder::styling::Effects::BOLD,
+        )
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "flycomp")]
 #[command(about = "Generate shell completions from COMMAND --help output")]
+#[command(color = clap::ColorChoice::Auto)]
+#[command(styles = cli_styles())]
 struct CliArgs {
     /// Command name or path to synthesize completions for.
     #[arg(required_unless_present = "version")]
