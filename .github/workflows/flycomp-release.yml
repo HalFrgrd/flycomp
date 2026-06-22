@@ -24,8 +24,8 @@ jobs:
         shell: bash
         run: |
           version_no_prefix="${VERSION#flycomp-v}"
-          if ! grep -q "version = \"$version_no_prefix\"" flycomp/Cargo.toml; then
-            echo "version does not match flycomp/Cargo.toml" >&2
+          if ! grep -q "version = \"$version_no_prefix\"" Cargo.toml; then
+            echo "version does not match Cargo.toml" >&2
             exit 1
           fi
       - name: Create GitHub release
@@ -98,4 +98,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release edit "${{ needs.create-release.outputs.version }}" --prerelease --draft=false --repo HalFrgrd/flyline
+          gh release edit "${{ needs.create-release.outputs.version }}" --prerelease --draft=false --repo HalFrgrd/flycomp
