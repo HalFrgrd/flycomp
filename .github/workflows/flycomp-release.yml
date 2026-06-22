@@ -23,7 +23,7 @@ jobs:
       - name: Check that tag version and Cargo.toml version are the same
         shell: bash
         run: |
-          version_no_prefix="${VERSION#flycomp-v}"
+          version_no_prefix="${VERSION#v}"
           if ! grep -q "version = \"$version_no_prefix\"" Cargo.toml; then
             echo "version does not match Cargo.toml" >&2
             exit 1
