@@ -3,7 +3,7 @@ name: Flycomp Release
 on:
   push:
     tags:
-      - 'flycomp-v*.*.*'
+      - 'v*.*.*'
   workflow_dispatch:
 
 permissions:
