@@ -16,13 +16,18 @@ Enter
 Sleep 500ms
 
 # Synthesize completions for grep in bash format and view in bat with syntax highlighting
-Type "flycomp grep --output bash | bat -l bash"
+Hide
+Type "flycomp grep --output bash > grep_completion.sh"
+Enter
+Sleep 1000ms
+Show
+Type "bat grep_completion.sh"
 Sleep 500ms
 Enter
 Sleep 2000ms
 
 # Scroll down slowly
-Down@200ms 30
+Down@180ms 50
 Sleep 1500ms
 
 # Exit bat
@@ -38,13 +43,18 @@ Show
 Sleep 1000ms
 
 # Output JSON structure of rm command options and view in bat with syntax highlighting
-Type "flycomp rm --output json | bat -l json"
+Hide
+Type "flycomp rm --output json > rm_completion.json"
+Enter
+Sleep 1000ms
+Show
+Type "bat rm_completion.json"
 Sleep 500ms
 Enter
 Sleep 2000ms
 
 # Scroll down slowly
-Down@200ms 30
+Down@180ms 50
 Sleep 1500ms
 
 # Exit bat

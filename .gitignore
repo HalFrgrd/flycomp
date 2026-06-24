@@ -1,3 +1,5 @@
 /target/
 *.gif
 *.svg
+grep_completion.sh
+rm_completion.json

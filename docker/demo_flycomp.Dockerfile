@@ -18,3 +18,5 @@ RUN faketime @1771881894 /home/john/bin/evp demo.tape
 
 FROM scratch
 COPY --from=demo-builder /app/*.gif /app/*.svg /
+COPY --from=demo-builder /home/john/grep_completion.sh /grep_completion.sh
+COPY --from=demo-builder /home/john/rm_completion.json /rm_completion.json
