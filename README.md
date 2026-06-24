@@ -244,9 +244,9 @@ fi
 </details>
 <!-- GREP_COMPLETION_END -->
 
-<!-- RM_COMPLETION_START -->
+<!-- EVP_COMPLETION_START -->
 <details>
-<summary><b>View Rm Options JSON Structure Output</b></summary>
+<summary><b>View Evp Options JSON Structure Output</b></summary>
 
 ```json
 {
@@ -257,124 +257,92 @@ fi
     "generated_at": "2026-02-23T21:25:24Z",
     "output_format": "json",
     "requested_strategy": "man-page-or-run-help",
-    "strategy_used": "man-page",
+    "strategy_used": "run-help",
     "sandboxed": true,
     "timeout_ms": 15000,
-    "command_path": "rm",
+    "command_path": "evp",
     "man_pages_read": 1,
-    "help_runs": 0
+    "help_runs": 6
   },
   "command": {
-    "name": "rm",
+    "name": "evp",
     "aliases": [],
     "author": null,
-    "description": "remove files or directories",
+    "description": "Run a VHS-format script and produce a GIF",
     "args": [
       {
-        "long": "--force",
-        "short": "-f",
-        "description": "ignore nonexistent files and arguments, never prompt",
-        "value_name": null,
-        "num_args": null,
-        "value_enum": null,
-        "value_hint": "unknown"
-      },
-      {
-        "long": null,
-        "short": "-i",
-        "description": "prompt before every removal",
-        "value_name": null,
-        "num_args": null,
-        "value_enum": null,
-        "value_hint": "unknown"
-      },
-      {
-        "long": null,
-        "short": "-I",
-        "description": "prompt once before removing more than three files, or when removing recursively; less intrusive than -i, while still giving protection against most mistakes",
-        "value_name": null,
-        "num_args": null,
-        "value_enum": null,
-        "value_hint": "unknown"
-      },
-      {
-        "long": "--interactive",
+        "long": "--run-test-script",
         "short": null,
-        "description": "prompt according to WHEN: never, once (-I), or always (-i); without WHEN, prompt always",
-        "value_name": "WHEN",
-        "num_args": "?",
-        "value_enum": null,
-        "value_hint": "unknown"
-      },
-      {
-        "long": "--one-file-system",
-        "short": null,
-        "description": "when removing a hierarchy recursively, skip any directory that is on a file system different from that of the corresponding command line argument",
+        "description": "Run the built-in demo tape embedded in the binary. Writes to `./evp-test.gif` in the current directory unless `--output` is also given. Useful for verifying an install works end-to-end without needing any external files",
         "value_name": null,
         "num_args": null,
         "value_enum": null,
         "value_hint": "unknown"
       },
       {
-        "long": "--no-preserve-root",
+        "long": "--output",
+        "short": "-o",
+        "description": "Override the script's `Output` directives. Repeat to write multiple outputs in one run (for example `--output out.gif --output out.svg`)",
+        "value_name": "OUTPUT",
+        "num_args": "1",
+        "value_enum": null,
+        "value_hint": "file-path"
+      },
+      {
+        "long": "--dump-json",
         "short": null,
-        "description": "do not treat '/' specially",
+        "description": "Also render the intermediate Recording as JSON to this path",
+        "value_name": "DUMP_JSON",
+        "num_args": "1",
+        "value_enum": null,
+        "value_hint": "unknown"
+      },
+      {
+        "long": "--no-embed-fonts",
+        "short": null,
+        "description": "Do not embed base64 font data inside the generated SVG output",
         "value_name": null,
         "num_args": null,
         "value_enum": null,
         "value_hint": "unknown"
       },
       {
-        "long": "--preserve-root",
+        "long": "--no-system-fonts",
         "short": null,
-        "description": "do not remove '/' (default); with 'all', reject any command line argument on a separate device from its parent",
-        "value_name": "all",
-        "num_args": "?",
+        "description": "Do not use system fallback fonts. Fail if any rendered glyph is missing from the loaded/embedded fonts",
+        "value_name": null,
+        "num_args": null,
+        "value_enum": null,
+        "value_hint": "unknown"
+      },
+      {
+        "long": "--mimic-vhs",
+        "short": null,
+        "description": "Mimic VHS behavior (only allow a single word for the shell, use VHS default shell options and prompt colors)",
+        "value_name": null,
+        "num_args": null,
+        "value_enum": null,
+        "value_hint": "unknown"
+      },
+      {
+        "long": "--log-level",
+        "short": null,
+        "description": "Explicit log level override [possible values: error, warn, info, debug, trace]",
+        "value_name": "LOG_LEVEL",
+        "num_args": "1",
         "value_enum": [
-          "all"
+          "error",
+          "warn",
+          "info",
+          "debug",
+          "trace"
         ],
         "value_hint": "unknown"
       },
       {
-        "long": null,
-        "short": "-r",
-        "description": "remove directories and their contents recursively",
-        "value_name": null,
-        "num_args": null,
-        "value_enum": null,
-        "value_hint": "unknown"
-      },
-      {
-        "long": "--recursive",
-        "short": "-R",
-        "description": "remove directories and their contents recursively",
-        "value_name": null,
-        "num_args": null,
-        "value_enum": null,
-        "value_hint": "unknown"
-      },
-      {
-        "long": "--dir",
-        "short": "-d",
-        "description": "remove empty directories",
-        "value_name": null,
-        "num_args": null,
-        "value_enum": null,
-        "value_hint": "unknown"
-      },
-      {
-        "long": "--verbose",
-        "short": "-v",
-        "description": "explain what is being done",
-        "value_name": null,
-        "num_args": null,
-        "value_enum": null,
-        "value_hint": "unknown"
-      },
-      {
         "long": "--help",
-        "short": null,
-        "description": "display this help and exit",
+        "short": "-h",
+        "description": "Print help",
         "value_name": null,
         "num_args": null,
         "value_enum": null,
@@ -382,20 +350,93 @@ fi
       },
       {
         "long": "--version",
-        "short": null,
-        "description": "output version information and exit",
+        "short": "-V",
+        "description": "Print version",
         "value_name": null,
         "num_args": null,
         "value_enum": null,
         "value_hint": "unknown"
       }
     ],
-    "subcommands": []
+    "subcommands": [
+      {
+        "name": "themes",
+        "aliases": [],
+        "author": null,
+        "description": "Print the bundled VHS theme preset names",
+        "args": [
+          {
+            "long": "--help",
+            "short": "-h",
+            "description": "Print help",
+            "value_name": null,
+            "num_args": null,
+            "value_enum": null,
+            "value_hint": "unknown"
+          }
+        ],
+        "subcommands": []
+      },
+      {
+        "name": "validate",
+        "aliases": [],
+        "author": null,
+        "description": "Parse a tape and exit without running it",
+        "args": [
+          {
+            "long": "--help",
+            "short": "-h",
+            "description": "Print help",
+            "value_name": null,
+            "num_args": null,
+            "value_enum": null,
+            "value_hint": "unknown"
+          }
+        ],
+        "subcommands": []
+      },
+      {
+        "name": "completion",
+        "aliases": [],
+        "author": null,
+        "description": "Print a shell completion script to stdout",
+        "args": [
+          {
+            "long": "--help",
+            "short": "-h",
+            "description": "Print help",
+            "value_name": null,
+            "num_args": null,
+            "value_enum": null,
+            "value_hint": "unknown"
+          }
+        ],
+        "subcommands": []
+      },
+      {
+        "name": "help",
+        "aliases": [],
+        "author": null,
+        "description": "Print this message or the help of the given subcommand(s)",
+        "args": [
+          {
+            "long": null,
+            "short": null,
+            "description": "[COMMAND]... Print help for the subcommand(s)",
+            "value_name": "COMMAND]...",
+            "num_args": "1",
+            "value_enum": null,
+            "value_hint": "command-name"
+          }
+        ],
+        "subcommands": []
+      }
+    ]
   }
 }
 ```
 </details>
-<!-- RM_COMPLETION_END -->
+<!-- EVP_COMPLETION_END -->
 
 
 ---
@@ -434,8 +475,8 @@ flycomp grep
 # Generate Zsh completions for git
 flycomp git --output zsh
 
-# Output structured JSON of options for the rm command
-flycomp rm --output json
+# Output structured JSON of options for the evp command
+flycomp evp --output json
 
 # Specify the parsing strategy
 flycomp cp --strategy man-page

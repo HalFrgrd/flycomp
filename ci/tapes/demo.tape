@@ -42,13 +42,13 @@ Show
 
 Sleep 1000ms
 
-# Output JSON structure of rm command options and view in bat with syntax highlighting
+# Output JSON structure of evp command options and view in bat with syntax highlighting
 Hide
-Type "flycomp rm --output json > rm_completion.json"
+Type "flycomp evp --output json > evp_completion.json"
 Enter
 Sleep 1000ms
 Show
-Type "bat rm_completion.json"
+Type "bat evp_completion.json"
 Sleep 500ms
 Enter
 Sleep 2000ms

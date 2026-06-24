@@ -35,22 +35,22 @@ def main():
     else:
         print("Warning: grep_completion.sh not found.")
 
-    rm_path = pathlib.Path("rm_completion.json")
-    if rm_path.exists():
-        rm_text = rm_path.read_text().rstrip("\n")
-        rm_replacement = [
-            "<!-- RM_COMPLETION_START -->\n",
+    evp_path = pathlib.Path("evp_completion.json")
+    if evp_path.exists():
+        evp_text = evp_path.read_text().rstrip("\n")
+        evp_replacement = [
+            "<!-- EVP_COMPLETION_START -->\n",
             "<details>\n",
-            "<summary><b>View Rm Options JSON Structure Output</b></summary>\n\n",
+            "<summary><b>View Evp Options JSON Structure Output</b></summary>\n\n",
             "```json\n",
-            *[l + "\n" for l in rm_text.splitlines()],
+            *[l + "\n" for l in evp_text.splitlines()],
             "```\n",
             "</details>\n",
-            "<!-- RM_COMPLETION_END -->\n"
+            "<!-- EVP_COMPLETION_END -->\n"
         ]
-        lines = replace_between_markers(lines, "<!-- RM_COMPLETION_START -->", "<!-- RM_COMPLETION_END -->", rm_replacement)
+        lines = replace_between_markers(lines, "<!-- EVP_COMPLETION_START -->", "<!-- EVP_COMPLETION_END -->", evp_replacement)
     else:
-        print("Warning: rm_completion.json not found.")
+        print("Warning: evp_completion.json not found.")
 
     readme_path.write_text("".join(lines))
     print("README.md successfully updated with completion contents!")
