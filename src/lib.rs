@@ -1842,7 +1842,7 @@ fn command_basename(command_path: &str) -> String {
 }
 
 fn load_manpage_command(command_path: &str, recurse_limit: usize) -> anyhow::Result<Command> {
-    let cmd_name = command_basename(command_path);
+    let cmd_name = command_basename(command_path).replace(' ', "-");
     log::info!("flycomp: loading man page for '{}'", cmd_name);
     let manpage_path = locate_manpage(&cmd_name)?;
     let manpage_content = read_manpage_source(&manpage_path)?;
@@ -1988,7 +1988,7 @@ where
     let mut root = parse_help(&top_help);
 
     // Always use the basename of the supplied path as the canonical name.
-    let cmd_name = command_basename(command_path);
+    let cmd_name = command_basename(command_path).replace(' ', "-");
     root.name = Some(cmd_name);
 
     if recurse_limit == 0 {
@@ -2186,15 +2186,21 @@ fn run_help_attempt(
     timeout_ms: u64,
 ) -> anyhow::Result<String> {
     increment_help_runs();
-    let mut actual_command = command_path.to_string();
 
-    // If command_path is a simple name (no path separators), check CWD.
-    if !command_path.contains(std::path::MAIN_SEPARATOR) {
-        let cwd_path = std::env::current_dir()?.join(command_path);
+    let parts: Vec<&str> = command_path.split_whitespace().collect();
+    let (binary, subcommands) = parts
+        .split_first()
+        .ok_or_else(|| anyhow::anyhow!("empty command string"))?;
+
+    let mut actual_command = binary.to_string();
+
+    // If binary is a simple name (no path separators), check CWD.
+    if !binary.contains(std::path::MAIN_SEPARATOR) {
+        let cwd_path = std::env::current_dir()?.join(binary);
         if cwd_path.exists() {
             use is_executable::IsExecutable;
             if cwd_path.is_executable() {
-                actual_command = format!(".{}{}", std::path::MAIN_SEPARATOR, command_path);
+                actual_command = cwd_path.to_string_lossy().to_string();
             }
         }
     }
@@ -2225,10 +2231,13 @@ fn run_help_attempt(
         std::process::Command::new(&actual_command)
     };
 
-    let cmd_args_str = if extra_args.is_empty() {
+    let mut all_args = subcommands.to_vec();
+    all_args.extend(extra_args.iter());
+
+    let cmd_args_str = if all_args.is_empty() {
         String::new()
     } else {
-        format!("{} ", extra_args.join(" "))
+        format!("{} ", all_args.join(" "))
     };
     if use_sandbox {
         log::info!(
@@ -2247,7 +2256,7 @@ fn run_help_attempt(
     }
 
     let mut child = child
-        .args(extra_args)
+        .args(&all_args)
         .arg(help_arg)
         .env("PAGER", "cat")
         .env("MANPAGER", "cat")
@@ -2401,7 +2410,7 @@ pub fn generate_completion_script(
         strategy,
         recurse_limit,
     )?;
-    let cmd_name = command_basename(command_path);
+    let cmd_name = command_basename(command_path).replace(' ', "-");
 
     let mut clap_cmd = to_clap_command(&outcome.command);
     let mut output = Vec::new();
@@ -2959,8 +2968,11 @@ Options:
         let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
+    static CWD_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn test_run_help_in_cwd() {
+        let _guard = CWD_MUTEX.lock().unwrap();
         use std::io::Write;
         let temp_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("target")
@@ -3800,5 +3812,46 @@ fi
                 "bwrap --ro-bind / / --dev /dev --proc /proc --tmpfs /tmp --unshare-all --"
             );
         }
+    }
+
+    #[test]
+    fn test_run_help_with_subcommands() {
+        use std::io::Write;
+        let temp_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("test_run_help_subcommands");
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let cmd_path = temp_dir.join("subcmd_test_cmd");
+
+        let script = r#"#!/bin/sh
+echo "Args: $@"
+"#;
+        {
+            let mut f = std::fs::File::create(&cmd_path).unwrap();
+            f.write_all(script.as_bytes()).unwrap();
+            f.sync_all().unwrap();
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&cmd_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&cmd_path, perms).unwrap();
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        let _guard = CWD_MUTEX.lock().unwrap();
+        let old_cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&temp_dir).unwrap();
+
+        let res = run_help("subcmd_test_cmd foo bar", &["extra"], false, 5000);
+
+        std::env::set_current_dir(old_cwd).unwrap();
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        let output = res.expect("run_help should succeed");
+        assert!(output.contains("Args: foo bar extra --help"));
     }
 }

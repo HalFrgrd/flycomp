@@ -6391,4 +6391,41 @@ Use asynchronous IO.
             ],
         );
     }
+
+    #[test]
+    fn parses_git_recursive_with_git_push() {
+        use crate::test_helpers::ExpectedArg;
+        use crate::test_helpers::assert_contains_expected_args;
+        let cmd = parse_test_manpage_recursive("git.1", 5);
+
+        let push_sub = cmd
+            .subcommands
+            .iter()
+            .find(|s| s.name.as_deref() == Some("push"))
+            .expect("git should have 'push' subcommand");
+
+        assert_contains_expected_args(
+            push_sub,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-f".to_string()),
+                        long: Some("--force".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "refuses to update a remote ref",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: None,
+                        long: Some("--repo".to_string()),
+                        value_name: Some("<repository>".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "command-line argument takes precedence",
+                },
+            ],
+        );
+    }
 }
