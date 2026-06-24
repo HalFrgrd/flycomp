@@ -1,18 +1,18 @@
 target "builder" {
     context = "."
-    dockerfile = "docker/builder.Dockerfile"
+    dockerfile = "ci/docker/builder.Dockerfile"
     target = "flycomp-builder"
 }
 
 target "built-artifact" {
     context = "."
-    dockerfile = "docker/builder.Dockerfile"
+    dockerfile = "ci/docker/builder.Dockerfile"
     target = "flycomp-built-artifact"
 }
 
 target "demo-base" {
     context = "."
-    dockerfile = "docker/demo_base.Dockerfile"
+    dockerfile = "ci/docker/demo_base.Dockerfile"
 }
 
 target "_demo-base" {
@@ -28,7 +28,7 @@ target "demo-extracted" {
     contexts = {
         flycomp-extracted-binary = "target:built-artifact"
     }
-    dockerfile = "docker/demo_flycomp.Dockerfile"
+    dockerfile = "ci/docker/demo_flycomp.Dockerfile"
 }
 
 group "demos" {

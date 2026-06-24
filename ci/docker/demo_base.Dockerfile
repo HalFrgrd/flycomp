@@ -46,7 +46,7 @@ RUN touch /home/john/.bashrc && \
 
 # Copy mock bwrap to path and make it executable
 RUN mkdir -p /home/john/bin
-COPY docker/bwrap /home/john/bin/bwrap
+COPY ci/docker/bwrap /home/john/bin/bwrap
 RUN ln -s /usr/bin/batcat /home/john/bin/bat
 USER root
 RUN chmod +x /home/john/bin/bwrap

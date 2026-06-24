@@ -34,7 +34,7 @@ jobs:
 
       - name: Update README with generated completions
         run: |
-          python3 scripts/update_readme_completions.py
+          python3 ci/scripts/update_readme_completions.py
 
       - name: Commit and push changes
         run: |
