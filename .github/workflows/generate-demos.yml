@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -36,14 +37,16 @@ jobs:
         run: |
           python3 ci/scripts/update_readme_completions.py
 
-      - name: Commit and push changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add README.md
-          git diff --cached --quiet && echo "No changes to README.md" && exit 0
-          git commit -m "chore: auto-embed completions output in README"
-          git push
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: auto-embed completions output in README"
+          title: "chore: auto-embed completions output in README"
+          body: "This PR was created automatically by GitHub Actions to update the README with the latest completions output."
+          branch: "auto-update-readme-completions"
+          delete-branch: true
+          add-paths: README.md
 
       - name: Upload GIFs to assets release
         env:
