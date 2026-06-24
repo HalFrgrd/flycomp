@@ -9,6 +9,9 @@ WORKDIR /app
 # Give john ownership of the app directory
 RUN chown -R john:john /app
 
+# Re-enable man pages in the minimal Ubuntu image before installing anything
+RUN rm -f /etc/dpkg/dpkg.cfg.d/excludes
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash-completion \
     faketime \
@@ -17,6 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fontconfig \
     ca-certificates \
     curl \
+    bat \
+    less \
+    man-db \
+    manpages \
+    && apt-get install -y --reinstall coreutils grep \
     && rm -rf /var/lib/apt/lists/* \
     && fc-cache -f -v
 
@@ -39,6 +47,7 @@ RUN touch /home/john/.bashrc && \
 # Copy mock bwrap to path and make it executable
 RUN mkdir -p /home/john/bin
 COPY docker/bwrap /home/john/bin/bwrap
+RUN ln -s /usr/bin/batcat /home/john/bin/bat
 USER root
 RUN chmod +x /home/john/bin/bwrap
 USER john

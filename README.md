@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/github/license/HalFrgrd/flycomp)](https://github.com/HalFrgrd/flycomp/blob/master/LICENSE-MIT)
 [![Latest Release](https://img.shields.io/github/v/release/HalFrgrd/flycomp)](https://github.com/HalFrgrd/flycomp/releases)
 
-**Generate shell completion scripts and structured command models dynamically from CLI `--help` outputs and Unix man pages.**
+**Generate shell completion scripts dynamically from CLI `--help` outputs and Unix man pages.**
 
 [![Demo](https://github.com/HalFrgrd/flycomp/releases/download/assets/demo.gif)](https://github.com/HalFrgrd/evp)
 

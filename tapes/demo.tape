@@ -15,19 +15,38 @@ Type "clear"
 Enter
 Sleep 500ms
 
-# Synthesize completions for grep in bash format
-Type "flycomp grep --output bash | head -n 20"
+# Synthesize completions for grep in bash format and view in bat with syntax highlighting
+Type "flycomp grep --output bash | bat -l bash"
 Sleep 500ms
 Enter
-Sleep 4000ms
+Sleep 2000ms
 
-# Clear screen again
+# Scroll down slowly
+Down@200ms 30
+Sleep 1500ms
+
+# Exit bat
+Type "q"
+
+Hide
+Sleep 100ms
 Type "clear"
 Enter
-Sleep 500ms
+Sleep 100ms
+Show
 
-# Output JSON structure of rm command options
-Type "flycomp rm --output json | head -n 20"
+Sleep 1000ms
+
+# Output JSON structure of rm command options and view in bat with syntax highlighting
+Type "flycomp rm --output json | bat -l json"
 Sleep 500ms
 Enter
-Sleep 4000ms
+Sleep 2000ms
+
+# Scroll down slowly
+Down@200ms 30
+Sleep 1500ms
+
+# Exit bat
+Type "q"
+Sleep 2000ms
