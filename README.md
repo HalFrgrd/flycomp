@@ -12,7 +12,11 @@
 
 </div>
 
-When you use terminal applications, writing completion scripts manually for every shell (Bash, Zsh, Fish, etc.) is tedious and error-prone. `flycomp` solves this by automatically analyzing:
+When you use the terminal, you often come across programs that don't have a completion spec.
+For instance, your new Python script or newly installed package.
+When you're writing your command and press tab, nothing happens.
+Writing completion scripts manually is tedious and time consuming.
+`flycomp` solves this by automatically analyzing:
 - [man pages](https://man7.org/linux/man-pages/)
 - Help command outputs (`--help` or `help`) for the main command and subcommands
 
