@@ -31,15 +31,18 @@ download() {
     fi
 }
 
-fetch_text() {
-    url="$1"
+get_latest_version() {
+    url="https://github.com/${REPO}/releases/latest"
     if command -v curl >/dev/null 2>&1; then
-        curl -sSfL "$url"
+        tag_url="$(curl -sI "$url" | grep -i '^location:' | head -1)"
     elif command -v wget >/dev/null 2>&1; then
-        wget -qO- "$url"
+        tag_url="$(wget --max-redirect=0 --server-response -O /dev/null "$url" 2>&1 | grep -i 'location:' | head -1)"
     else
         err "Neither curl nor wget is available. Please install one and retry."
     fi
+    version="$(printf '%s' "$tag_url" | sed 's|.*/||' | cut -d' ' -f1 | tr -d '\r\n')"
+    [ -n "$version" ] || err "Could not determine latest version from GitHub Release redirect."
+    echo "$version"
 }
 
 # ---------------------------------------------------------------------------
@@ -62,19 +65,6 @@ detect_arch() {
         aarch64 | arm64) echo "aarch64" ;;
         *) err "Unsupported architecture: $arch" ;;
     esac
-}
-
-# ---------------------------------------------------------------------------
-# GitHub releases API
-# ---------------------------------------------------------------------------
-
-get_asset_url() {
-    release_json="$1"
-    asset_name="$2"
-    url="$(printf '%s' "$release_json" | grep '"browser_download_url"' \
-        | grep "/${asset_name}\"" | head -1 \
-        | sed 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
-    echo "$url"
 }
 
 # ---------------------------------------------------------------------------
@@ -113,26 +103,17 @@ main() {
     if [ -n "${FLYCOMP_RELEASE_VERSION:-}" ]; then
         say "Using specified release version: ${FLYCOMP_RELEASE_VERSION}"
         VERSION="${FLYCOMP_RELEASE_VERSION}"
-        RELEASE_JSON="$(fetch_text "https://api.github.com/repos/${REPO}/releases/tags/${VERSION}")"
-        printf '%s' "$RELEASE_JSON" | grep -q '"tag_name"' \
-            || err "Could not find release for version ${VERSION}. Please check https://github.com/${REPO}/releases for available versions."
     else
         say "Fetching latest release information..."
-        RELEASE_JSON="$(fetch_text "https://api.github.com/repos/${REPO}/releases/latest")"
-        VERSION="$(printf '%s' "$RELEASE_JSON" | grep '"tag_name"' | head -1 \
-            | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
-        [ -n "$VERSION" ] || err "Could not determine latest release version from GitHub API."
+        VERSION="$(get_latest_version)"
         say "Latest version: ${VERSION}"
     fi
 
     ARCHIVE="flycomp-${VERSION}-${TARGET}.tar.gz"
     ARCHIVE_SHA256="${ARCHIVE}.sha256"
 
-    DOWNLOAD_URL="$(get_asset_url "$RELEASE_JSON" "$ARCHIVE")"
-    SHA256_URL="$(get_asset_url "$RELEASE_JSON" "$ARCHIVE_SHA256")"
-
-    [ -n "$DOWNLOAD_URL" ] || err "Could not find download URL for ${ARCHIVE} in the latest release.
-Please check https://github.com/${REPO}/releases for available assets."
+    DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ARCHIVE}"
+    SHA256_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ARCHIVE_SHA256}"
 
     TMP_DIR="$(mktemp -d)"
     # shellcheck disable=SC2064
