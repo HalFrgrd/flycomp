@@ -14,7 +14,7 @@ jobs:
     name: create-release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Get the release version from the tag
         run: echo "VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
       - name: Show the version
@@ -44,15 +44,24 @@ jobs:
       matrix:
         include:
           # Linux (via cross)
+          - { target: x86_64-unknown-linux-gnu,   os: ubuntu-latest, build_tool: cross, bin: flycomp }
           - { target: x86_64-unknown-linux-musl,  os: ubuntu-latest, build_tool: cross, bin: flycomp }
+          - { target: aarch64-unknown-linux-gnu,  os: ubuntu-latest, build_tool: cross, bin: flycomp }
           - { target: aarch64-unknown-linux-musl, os: ubuntu-latest, build_tool: cross, bin: flycomp }
+          # Additional Linux architectures
+          - { target: armv7-unknown-linux-gnueabihf,  os: ubuntu-latest, build_tool: cross, bin: flycomp }
+          - { target: i686-unknown-linux-gnu,         os: ubuntu-latest, build_tool: cross, bin: flycomp }
+          - { target: riscv64gc-unknown-linux-gnu,    os: ubuntu-latest, build_tool: cross, bin: flycomp }
+          - { target: powerpc64le-unknown-linux-gnu,  os: ubuntu-latest, build_tool: cross, bin: flycomp }
+          # FreeBSD (via cross)
+          - { target: x86_64-unknown-freebsd,     os: ubuntu-latest, build_tool: cross, bin: flycomp }
           # macOS (native cargo)
           - { target: x86_64-apple-darwin,        os: macos-latest,  build_tool: cargo, bin: flycomp }
           - { target: aarch64-apple-darwin,       os: macos-latest,  build_tool: cargo, bin: flycomp }
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
