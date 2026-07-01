@@ -1139,7 +1139,7 @@ Options:
 > [!TIP]
 > No need for `sudo`!
 ```bash
-curl -sSfL https://raw.githubusercontent.com/HalFrgrd/flycomp/master/install.sh | sh
+curl -sSfL https://github.com/HalFrgrd/flycomp/releases/latest/download/install.sh | sh
 ```
 This downloads the correct binary from the latest release.
 Flyline is built as a statically linked, [musl](https://www.musl-libc.org/) binary so it has zero runtime dependencies!

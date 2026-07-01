@@ -1,11 +1,24 @@
 #!/bin/sh
 # Flycomp installer
-# Usage: curl -sSfL https://raw.githubusercontent.com/HalFrgrd/flycomp/master/install.sh | sh
+# Usage: curl -sSfL https://github.com/HalFrgrd/flycomp/releases/latest/download/install.sh | sh
 
 set -eu
 
+expand_path() {
+    case "$1" in
+        '~/'*) echo "${HOME}/${1#~/}" ;;
+        '~')   echo "${HOME}" ;;
+        *)     echo "$1" ;;
+    esac
+}
+
 REPO="HalFrgrd/flycomp"
-INSTALL_DIR="${HOME}/.local/bin"
+if [ -n "${FLYCOMP_INSTALL_DIR:-}" ]; then
+    INSTALL_DIR="$(expand_path "$FLYCOMP_INSTALL_DIR")"
+else
+    INSTALL_DIR="${HOME}/.local/bin"
+fi
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -131,23 +144,6 @@ main() {
             || err "Checksum verification failed for ${ARCHIVE}."
     fi
 
-    # Prompt for install directory; read from /dev/tty so it works when piped.
-    # Falls back to the default when no terminal is available (e.g. CI).
-    say "Enter install directory (leave blank to use: ~/.local/bin)"
-    printf '> ' >&2
-    input_dir=""
-    if [ -t 0 ]; then
-        read -r input_dir || true
-    elif [ -r /dev/tty ]; then
-        read -r input_dir </dev/tty || true
-    fi
-    if [ -n "$input_dir" ]; then
-        case "$input_dir" in
-            '~/'*) input_dir="${HOME}/${input_dir#~/}" ;;
-            '~')   input_dir="${HOME}" ;;
-        esac
-        INSTALL_DIR="$input_dir"
-    fi
 
     mkdir -p "$INSTALL_DIR"
 
