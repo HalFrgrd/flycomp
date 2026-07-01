@@ -24,7 +24,7 @@ def main():
         grep_replacement = [
             "<!-- GREP_COMPLETION_START -->\n",
             "<details>\n",
-            "<summary><b>view grep bash completion script output</b></summary>\n\n",
+            "<summary><b>View `grep` bash completion script output</b></summary>\n\n",
             "```bash\n",
             *[l + "\n" for l in grep_text.splitlines()],
             "```\n",
@@ -41,7 +41,7 @@ def main():
         evp_replacement = [
             "<!-- EVP_COMPLETION_START -->\n",
             "<details>\n",
-            "<summary><b>view evp options json structure output</b></summary>\n\n",
+            "<summary><b>View `evp` options json structure output</b></summary>\n\n",
             "```json\n",
             *[l + "\n" for l in evp_text.splitlines()],
             "```\n",
