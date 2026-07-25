@@ -277,10 +277,18 @@ impl FlycompSettings {
     }
 }
 
-#[derive(Clone, Debug, clap::ValueEnum)]
+#[derive(
+    Clone, Copy, Debug, clap::ValueEnum, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
 #[value(rename_all = "lower")]
 pub enum OutputFormat {
     Bash,
+    #[value(
+        name = "bash-with-descriptions",
+        alias = "bashwithdescriptions",
+        alias = "bash_with_descriptions"
+    )]
+    BashWithDescriptions,
     Elvish,
     Fish,
     Powershell,
@@ -289,9 +297,11 @@ pub enum OutputFormat {
 }
 
 impl OutputFormat {
-    fn shell(self) -> Option<clap_complete::Shell> {
+    fn shell(&self) -> Option<clap_complete::Shell> {
         match self {
-            OutputFormat::Bash => Some(clap_complete::Shell::Bash),
+            OutputFormat::Bash | OutputFormat::BashWithDescriptions => {
+                Some(clap_complete::Shell::Bash)
+            }
             OutputFormat::Elvish => Some(clap_complete::Shell::Elvish),
             OutputFormat::Fish => Some(clap_complete::Shell::Fish),
             OutputFormat::Powershell => Some(clap_complete::Shell::PowerShell),
@@ -2602,6 +2612,177 @@ pub fn run_help(
 
 /// Run `command_path --help`, synthesize its completion model, and render a
 /// shell completion script.
+fn find_desc_in_cmd<'a>(token: &'a str, cmd: &'a Command) -> Option<&'a str> {
+    for arg in &cmd.args {
+        if let Some(short) = &arg.short {
+            let s = short.trim_start_matches('-');
+            if token == short || token == format!("-{}", s) {
+                if let Some(d) = &arg.description {
+                    return Some(d.as_str());
+                }
+            }
+        }
+        if let Some(long) = &arg.long {
+            let l = long.trim_start_matches('-');
+            if token == long || token == format!("--{}", l) {
+                if let Some(d) = &arg.description {
+                    return Some(d.as_str());
+                }
+            }
+        }
+        if let Some(vn) = &arg.value_name {
+            let clean_vn = vn.trim_matches(|c| c == '<' || c == '>');
+            if token == vn
+                || token == clean_vn
+                || token == format!("[{}]", clean_vn)
+                || token == format!("<{}>", clean_vn)
+            {
+                if let Some(d) = &arg.description {
+                    return Some(d.as_str());
+                }
+            }
+        }
+    }
+
+    for sub in &cmd.subcommands {
+        if let Some(name) = &sub.name {
+            if token == name {
+                if let Some(d) = &sub.description {
+                    return Some(d.as_str());
+                }
+            }
+        }
+        for alias in &sub.aliases {
+            if token == alias {
+                if let Some(d) = &sub.description {
+                    return Some(d.as_str());
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn find_command_by_path<'a>(root: &'a Command, path: &[String]) -> Option<&'a Command> {
+    if path.is_empty() {
+        return Some(root);
+    }
+    let mut current = root;
+    for segment in path.iter().skip(1) {
+        if let Some(sub) = current.subcommands.iter().find(|s| {
+            s.name.as_deref() == Some(segment.as_str())
+                || s.aliases.iter().any(|a| a == segment.as_str())
+        }) {
+            current = sub;
+        } else {
+            return None;
+        }
+    }
+    Some(current)
+}
+
+fn find_description_for_token<'a>(
+    token: &'a str,
+    cmd_path: &[String],
+    root_cmd: &'a Command,
+) -> Option<&'a str> {
+    let target_cmd = find_command_by_path(root_cmd, cmd_path).unwrap_or(root_cmd);
+    if let Some(desc) = find_desc_in_cmd(token, target_cmd) {
+        return Some(desc);
+    }
+    if (target_cmd as *const Command) != (root_cmd as *const Command) {
+        if let Some(desc) = find_desc_in_cmd(token, root_cmd) {
+            return Some(desc);
+        }
+    }
+    None
+}
+
+fn try_apply_bash_descriptions(script: &str, root_cmd: &Command) -> Option<String> {
+    if !script.contains("opts=") || !script.contains("compgen -W") {
+        return None;
+    }
+
+    let mut lines = Vec::new();
+    let mut current_cmd_path: Vec<String> = Vec::new();
+    let mut modified_any = false;
+
+    for line in script.lines() {
+        let trimmed = line.trim();
+        if trimmed.ends_with(')') && !trimmed.starts_with('*') && !trimmed.starts_with(';') {
+            let pattern = trimmed.trim_end_matches(')').trim();
+            if pattern.contains("__") || pattern == root_cmd.name.as_deref().unwrap_or("") {
+                current_cmd_path = pattern.split("__").map(|s| s.to_string()).collect();
+            }
+        }
+
+        if trimmed == "opts=\"\"" {
+            let indent_len = line.len() - line.trim_start().len();
+            let indent = &line[..indent_len];
+            lines.push(format!("{}opts=()", indent));
+            modified_any = true;
+            continue;
+        }
+
+        if trimmed.starts_with("opts=\"") && trimmed.ends_with('"') && trimmed.len() >= 7 {
+            let indent_len = line.len() - line.trim_start().len();
+            let indent = &line[..indent_len];
+            let content = &trimmed[6..trimmed.len() - 1];
+
+            if !content.is_empty() {
+                let tokens: Vec<&str> = content.split_whitespace().collect();
+                let mut array_elements = Vec::new();
+
+                for token in tokens {
+                    let desc = find_description_for_token(token, &current_cmd_path, root_cmd);
+                    let clean_desc = desc.unwrap_or_default().replace(['\n', '\r', '\t'], " ");
+                    let clean_desc = clean_desc.trim();
+                    let escaped_element = format!("{}\t{}", token, clean_desc).replace('"', "\\\"");
+                    array_elements.push(format!("\"{}\"", escaped_element));
+                }
+
+                let new_line = format!("{}opts=({})", indent, array_elements.join(" "));
+                lines.push(new_line);
+                modified_any = true;
+                continue;
+            }
+        }
+
+        if trimmed.contains("compgen -W \"${opts}\"")
+            || trimmed.contains("compgen -W \"${opts[*]}\"")
+        {
+            let indent_len = line.len() - line.trim_start().len();
+            let indent = &line[..indent_len];
+            lines.push(format!("{}COMPREPLY=()", indent));
+            lines.push(format!("{}for item in \"${{opts[@]}}\"; do", indent));
+            lines.push(format!(
+                "{}    if [[ \"$item\" == \"$cur\"* ]]; then",
+                indent
+            ));
+            lines.push(format!("{}        COMPREPLY+=(\"$item\")", indent));
+            lines.push(format!("{}    fi", indent));
+            lines.push(format!("{}done", indent));
+            modified_any = true;
+            continue;
+        }
+
+        lines.push(line.to_string());
+    }
+
+    if !modified_any {
+        return None;
+    }
+
+    let mut result = lines.join("\n");
+    if script.ends_with('\n') {
+        result.push('\n');
+    }
+    Some(result)
+}
+
+/// Run `command_path --help`, synthesize its completion model, and render a
+/// shell completion script.
 pub fn generate_completion_script(
     command_path: &str,
     shell: clap_complete::Shell,
@@ -2610,75 +2791,22 @@ pub fn generate_completion_script(
     timeout_ms: u64,
     recurse_limit: usize,
 ) -> anyhow::Result<String> {
-    reset_stats();
-    let outcome = synthesize_completion_with(
-        command_path,
-        &|args| run_help(command_path, args, sandbox, timeout_ms),
-        strategy,
-        recurse_limit,
-    )?;
-    let cmd_name = command_basename(command_path).replace(' ', "-");
-
-    let mut clap_cmd = to_clap_command(&outcome.command);
-    let mut output = Vec::new();
-    clap_complete::generate(shell, &mut clap_cmd, &cmd_name, &mut output);
-
-    let script = std::str::from_utf8(&output)
-        .map_err(|e| anyhow::anyhow!("failed to encode completion script: {}", e))?
-        .to_string();
-
     let output_format = match shell {
-        clap_complete::Shell::Bash => "bash",
-        clap_complete::Shell::Elvish => "elvish",
-        clap_complete::Shell::Fish => "fish",
-        clap_complete::Shell::PowerShell => "powershell",
-        clap_complete::Shell::Zsh => "zsh",
-        _ => "unknown",
+        clap_complete::Shell::Bash => OutputFormat::Bash,
+        clap_complete::Shell::Elvish => OutputFormat::Elvish,
+        clap_complete::Shell::Fish => OutputFormat::Fish,
+        clap_complete::Shell::PowerShell => OutputFormat::Powershell,
+        clap_complete::Shell::Zsh => OutputFormat::Zsh,
+        _ => OutputFormat::Bash,
     };
-
-    let comment_char = "#";
-    let metadata_header = format!(
-        "{comment} Generated by flycomp version {version} ({git_hash}) built {build_time}\n\
-         {comment} Generated at: {generated_at}\n\
-         {comment} Output format: {output_format}\n\
-         {comment} Requested strategy: {requested_strategy}\n\
-         {comment} Strategy used: {strategy_used}\n\
-         {comment} Sandboxed: {sandboxed}\n\
-         {comment} Timeout (ms): {timeout_ms}\n\
-         {comment} Command path: {command_path}\n\
-         {comment} Man pages read: {man_pages_read}\n\
-         {comment} Help runs: {help_runs}\n\n",
-        comment = comment_char,
-        version = env!("CARGO_PKG_VERSION"),
-        git_hash = env!("GIT_HASH"),
-        build_time = env!("BUILD_TIME"),
-        generated_at = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
-        output_format = output_format,
-        requested_strategy = Into::<&'static str>::into(strategy),
-        strategy_used = Into::<&'static str>::into(outcome.strategy_used),
-        sandboxed = sandbox,
-        timeout_ms = timeout_ms,
-        command_path = command_path,
-        man_pages_read = get_man_pages_read(),
-        help_runs = get_help_runs(),
-    );
-
-    let mut final_script = String::new();
-    let lines: Vec<&str> = script.lines().collect();
-    if !lines.is_empty() && (lines[0].starts_with("#compdef") || lines[0].starts_with("#!")) {
-        final_script.push_str(lines[0]);
-        final_script.push('\n');
-        final_script.push_str(&metadata_header);
-        for line in lines.iter().skip(1) {
-            final_script.push_str(line);
-            final_script.push('\n');
-        }
-    } else {
-        final_script.push_str(&metadata_header);
-        final_script.push_str(&script);
-    }
-
-    Ok(final_script)
+    generate_completion_output(
+        command_path,
+        output_format,
+        strategy,
+        sandbox,
+        timeout_ms,
+        recurse_limit,
+    )
 }
 
 /// Generate completion output for a command as either a shell script or JSON.
@@ -2707,15 +2835,86 @@ pub fn generate_completion_output(
             outcome.command,
         )
     } else {
-        let shell = output.shell().expect("non-JSON output has shell mapping");
-        generate_completion_script(
+        let outcome = synthesize_completion_with(
             command_path,
-            shell,
+            &|args| run_help(command_path, args, sandbox, timeout_ms),
             strategy,
-            sandbox,
-            timeout_ms,
             recurse_limit,
-        )
+        )?;
+        let cmd_name = command_basename(command_path).replace(' ', "-");
+
+        let mut clap_cmd = to_clap_command(&outcome.command);
+        let mut output_bytes = Vec::new();
+        let shell = output.shell().expect("non-JSON output has shell mapping");
+        clap_complete::generate(shell, &mut clap_cmd, &cmd_name, &mut output_bytes);
+
+        let mut script = std::str::from_utf8(&output_bytes)
+            .map_err(|e| anyhow::anyhow!("failed to encode completion script: {}", e))?
+            .to_string();
+
+        if matches!(output, OutputFormat::BashWithDescriptions) {
+            if let Some(transformed) = try_apply_bash_descriptions(&script, &outcome.command) {
+                script = transformed;
+            } else {
+                log::warn!(
+                    "flycomp: generated script format unexpected for BashWithDescriptions; falling back to standard Bash script"
+                );
+            }
+        }
+
+        let output_format_str = match output {
+            OutputFormat::Bash => "bash",
+            OutputFormat::BashWithDescriptions => "bash-with-descriptions",
+            OutputFormat::Elvish => "elvish",
+            OutputFormat::Fish => "fish",
+            OutputFormat::Powershell => "powershell",
+            OutputFormat::Zsh => "zsh",
+            OutputFormat::Json => "json",
+        };
+
+        let comment_char = "#";
+        let metadata_header = format!(
+            "{comment} Generated by flycomp version {version} ({git_hash}) built {build_time}\n\
+             {comment} Generated at: {generated_at}\n\
+             {comment} Output format: {output_format}\n\
+             {comment} Requested strategy: {requested_strategy}\n\
+             {comment} Strategy used: {strategy_used}\n\
+             {comment} Sandboxed: {sandboxed}\n\
+             {comment} Timeout (ms): {timeout_ms}\n\
+             {comment} Command path: {command_path}\n\
+             {comment} Man pages read: {man_pages_read}\n\
+             {comment} Help runs: {help_runs}\n\n",
+            comment = comment_char,
+            version = env!("CARGO_PKG_VERSION"),
+            git_hash = env!("GIT_HASH"),
+            build_time = env!("BUILD_TIME"),
+            generated_at = Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+            output_format = output_format_str,
+            requested_strategy = Into::<&'static str>::into(strategy),
+            strategy_used = Into::<&'static str>::into(outcome.strategy_used),
+            sandboxed = sandbox,
+            timeout_ms = timeout_ms,
+            command_path = command_path,
+            man_pages_read = get_man_pages_read(),
+            help_runs = get_help_runs(),
+        );
+
+        let mut final_script = String::new();
+        let lines: Vec<&str> = script.lines().collect();
+        if !lines.is_empty() && (lines[0].starts_with("#compdef") || lines[0].starts_with("#!")) {
+            final_script.push_str(lines[0]);
+            final_script.push('\n');
+            final_script.push_str(&metadata_header);
+            for line in lines.iter().skip(1) {
+                final_script.push_str(line);
+                final_script.push('\n');
+            }
+        } else {
+            final_script.push_str(&metadata_header);
+            final_script.push_str(&script);
+        }
+
+        Ok(final_script)
     }
 }
 
@@ -4089,5 +4288,31 @@ echo "Args: $@"
 
         let output = res.expect("run_help should succeed");
         assert!(output.contains("Args: foo bar extra --help"));
+    }
+
+    #[test]
+    fn test_bash_with_descriptions_output() {
+        const HELP: &str = r#"Usage: greet [OPTIONS]
+
+Options:
+  -n, --name <NAME>  Name to greet
+  -h, --help         Print help
+"#;
+        let cmd = parse_help(HELP);
+        let script = try_apply_bash_descriptions(
+            r#"_greet() {
+    opts="-n --name -h --help"
+    COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+}"#,
+            &cmd,
+        )
+        .expect("should transform expected format");
+        assert!(script.contains(
+            "opts=(\"-n\tName to greet\" \"--name\tName to greet\" \"-h\tPrint help\" \"--help\tPrint help\")"
+        ));
+
+        // Test fallback when script format does not match expected format
+        let fallback = try_apply_bash_descriptions("echo 'custom bash script'", &cmd);
+        assert!(fallback.is_none());
     }
 }
