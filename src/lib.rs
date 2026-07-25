@@ -183,10 +183,20 @@ impl FlycompSettings {
     }
 
     pub fn sandbox(&self) -> bool {
-        if self.no_sandbox {
+        if self.no_sandbox || self.sandbox == Some(false) {
             false
         } else {
             self.sandbox.unwrap_or(true)
+        }
+    }
+
+    /// Returns the bwrap sandbox command string if sandboxing is enabled in settings
+    /// AND bwrap is available on the system. Returns `None` otherwise.
+    pub fn resolved_sandbox(&self) -> Option<String> {
+        if self.sandbox() {
+            is_sandboxing_available()
+        } else {
+            None
         }
     }
 
