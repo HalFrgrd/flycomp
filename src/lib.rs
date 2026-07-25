@@ -132,6 +132,46 @@ impl Default for FlycompSettings {
     }
 }
 
+/// The status and reasoning for whether bubblewrap sandboxing will be used.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SandboxStatus {
+    /// Sandboxing is enabled and bubblewrap command is available.
+    Sandboxed(String),
+    /// Sandboxing was explicitly disabled via settings (`--no-sandbox` / `--sandbox false`).
+    DisabledInSettings,
+    /// Sandboxing is enabled in settings, but `bwrap` executable was not found in PATH.
+    BwrapNotFound,
+}
+
+impl SandboxStatus {
+    /// Returns true if sandboxing is active.
+    pub fn is_sandboxed(&self) -> bool {
+        matches!(self, SandboxStatus::Sandboxed(_))
+    }
+
+    /// Short label ("sandboxed" or "unsandboxed").
+    pub fn label(&self) -> &'static str {
+        if self.is_sandboxed() {
+            "sandboxed"
+        } else {
+            "unsandboxed"
+        }
+    }
+
+    /// Detailed description explaining why sandboxing is or isn't active.
+    pub fn description(&self) -> &str {
+        match self {
+            SandboxStatus::Sandboxed(cmd) => cmd.as_str(),
+            SandboxStatus::DisabledInSettings => {
+                "Sandboxing disabled in flycomp settings (`--no-sandbox`)."
+            }
+            SandboxStatus::BwrapNotFound => {
+                "bubblewrap (bwrap) not found in PATH; running completion check unsandboxed."
+            }
+        }
+    }
+}
+
 impl FlycompSettings {
     pub fn empty() -> Self {
         Self {
@@ -190,13 +230,23 @@ impl FlycompSettings {
         }
     }
 
+    /// Resolves the current sandbox status considering settings and host system capabilities.
+    pub fn sandbox_status(&self) -> SandboxStatus {
+        if !self.sandbox() {
+            SandboxStatus::DisabledInSettings
+        } else if let Some(cmd) = is_sandboxing_available() {
+            SandboxStatus::Sandboxed(cmd)
+        } else {
+            SandboxStatus::BwrapNotFound
+        }
+    }
+
     /// Returns the bwrap sandbox command string if sandboxing is enabled in settings
     /// AND bwrap is available on the system. Returns `None` otherwise.
     pub fn resolved_sandbox(&self) -> Option<String> {
-        if self.sandbox() {
-            is_sandboxing_available()
-        } else {
-            None
+        match self.sandbox_status() {
+            SandboxStatus::Sandboxed(cmd) => Some(cmd),
+            _ => None,
         }
     }
 
@@ -3946,6 +3996,19 @@ fi
                 .subcommands
                 .iter()
                 .any(|s| s.name.as_deref() == Some("man-sub"))
+        );
+    }
+
+    #[test]
+    fn test_sandbox_status() {
+        let mut settings = FlycompSettings::default();
+        settings.no_sandbox = true;
+        let status = settings.sandbox_status();
+        assert_eq!(status, SandboxStatus::DisabledInSettings);
+        assert_eq!(status.label(), "unsandboxed");
+        assert_eq!(
+            status.description(),
+            "Sandboxing disabled in flycomp settings (`--no-sandbox`)."
         );
     }
 
