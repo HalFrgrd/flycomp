@@ -41,24 +41,15 @@ struct CliArgs {
     /// Output format (defaults to bash).
     #[arg(long, value_enum, default_value_t = flycomp::OutputFormat::Bash)]
     output: flycomp::OutputFormat,
-    /// Parsing strategy.
-    #[arg(long, value_enum, default_value_t = flycomp::SynthesisStrategy::default())]
-    strategy: flycomp::SynthesisStrategy,
-    /// Run execution unsandboxed (bypass bubblewrap/bwrap sandboxing).
-    #[arg(long)]
-    no_sandbox: bool,
-    /// Timeout in milliseconds for running commands.
-    #[arg(long, default_value_t = 15000)]
-    timeout_ms: u64,
     /// Log level to output to stderr (off, error, warn, info, debug, trace).
     #[arg(long, default_value = "error")]
     log_level: String,
     /// Show version information
     #[arg(long)]
     version: bool,
-    /// Maximum depth for recursive subcommand synthesis/exploration.
-    #[arg(long, default_value_t = 3)]
-    recurse_limit: usize,
+
+    #[command(flatten)]
+    settings: flycomp::FlycompSettings,
 }
 
 struct SimpleLogger;
@@ -111,13 +102,10 @@ fn main() -> anyhow::Result<()> {
     }
 
     let command_str = args.command.as_deref().unwrap_or("");
-    match flycomp::generate_completion_output(
+    match flycomp::generate_completion_output_with_settings(
         command_str,
         args.output,
-        args.strategy,
-        !args.no_sandbox,
-        args.timeout_ms,
-        args.recurse_limit,
+        &args.settings,
     ) {
         Ok(output) => {
             print!("{}", output);

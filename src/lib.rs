@@ -59,7 +59,18 @@ pub mod parse_man;
 
 pub use parse_help::{parse_help, parse_help_argparse, parse_help_clap, parse_help_generic};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, clap::ValueEnum, IntoStaticStr)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Default,
+    clap::ValueEnum,
+    IntoStaticStr,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 #[value(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum SynthesisStrategy {
@@ -68,6 +79,142 @@ pub enum SynthesisStrategy {
     RunHelp,
     #[default]
     ManPageOrRunHelp,
+}
+
+/// Settings and configuration options for flycomp synthesis.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, clap::Args)]
+pub struct FlycompSettings {
+    /// Enable or disable flycomp for synthesizing shell completions.
+    #[arg(long = "enabled", default_missing_value = "true", num_args = 0..=1)]
+    pub enabled: Option<bool>,
+
+    /// Parsing strategy (man-page-then-run-help, man-page, run-help, man-page-or-run-help).
+    #[arg(long = "strategy", value_enum)]
+    pub strategy: Option<SynthesisStrategy>,
+
+    /// Enable or disable sandboxing (bubblewrap/bwrap).
+    #[arg(long = "sandbox", default_missing_value = "true", num_args = 0..=1)]
+    pub sandbox: Option<bool>,
+
+    /// Run execution unsandboxed (bypass bubblewrap/bwrap sandboxing).
+    #[arg(long = "no-sandbox", overrides_with = "sandbox")]
+    pub no_sandbox: bool,
+
+    /// Timeout in milliseconds for running commands during synthesis.
+    #[arg(long = "timeout-ms")]
+    pub timeout_ms: Option<u64>,
+
+    /// Maximum depth for recursive subcommand synthesis/exploration.
+    #[arg(long = "recurse-limit")]
+    pub recurse_limit: Option<usize>,
+
+    /// Directory where flycomp output should be saved.
+    #[arg(long = "output-dir", value_name = "DIR")]
+    pub output_dir: Option<String>,
+
+    /// Blacklist of command words for which flycomp prompt should be bypassed.
+    #[arg(long = "blacklist", value_name = "COMMANDS", num_args = 1..)]
+    pub blacklist: Option<Vec<String>>,
+}
+
+impl Default for FlycompSettings {
+    fn default() -> Self {
+        Self {
+            enabled: Some(true),
+            strategy: Some(SynthesisStrategy::ManPageOrRunHelp),
+            sandbox: Some(true),
+            no_sandbox: false,
+            timeout_ms: Some(5000),
+            recurse_limit: Some(2),
+            output_dir: None,
+            blacklist: Some(Vec::new()),
+        }
+    }
+}
+
+impl FlycompSettings {
+    pub fn empty() -> Self {
+        Self {
+            enabled: None,
+            strategy: None,
+            sandbox: None,
+            no_sandbox: false,
+            timeout_ms: None,
+            recurse_limit: None,
+            output_dir: None,
+            blacklist: None,
+        }
+    }
+
+    pub fn update(&mut self, other: FlycompSettings) {
+        if let Some(enabled) = other.enabled {
+            self.enabled = Some(enabled);
+        }
+        if let Some(strategy) = other.strategy {
+            self.strategy = Some(strategy);
+        }
+        if other.no_sandbox {
+            self.sandbox = Some(false);
+            self.no_sandbox = true;
+        } else if let Some(sandbox) = other.sandbox {
+            self.sandbox = Some(sandbox);
+            self.no_sandbox = !sandbox;
+        }
+        if let Some(timeout_ms) = other.timeout_ms {
+            self.timeout_ms = Some(timeout_ms);
+        }
+        if let Some(recurse_limit) = other.recurse_limit {
+            self.recurse_limit = Some(recurse_limit);
+        }
+        if let Some(output_dir) = other.output_dir {
+            self.output_dir = Some(output_dir);
+        }
+        if let Some(blacklist) = other.blacklist {
+            self.blacklist = Some(blacklist);
+        }
+    }
+
+    pub fn enabled(&self) -> bool {
+        self.enabled.unwrap_or(true)
+    }
+
+    pub fn strategy(&self) -> SynthesisStrategy {
+        self.strategy.unwrap_or(SynthesisStrategy::ManPageOrRunHelp)
+    }
+
+    pub fn sandbox(&self) -> bool {
+        if self.no_sandbox {
+            false
+        } else {
+            self.sandbox.unwrap_or(true)
+        }
+    }
+
+    pub fn timeout_ms(&self) -> u64 {
+        self.timeout_ms.unwrap_or(5000)
+    }
+
+    pub fn recurse_limit(&self) -> usize {
+        self.recurse_limit.unwrap_or(2)
+    }
+
+    pub fn output_dir(&self) -> Option<&str> {
+        self.output_dir.as_deref()
+    }
+
+    pub fn is_blacklisted(&self, command: &str) -> bool {
+        self.blacklist
+            .as_ref()
+            .map_or(false, |bl| bl.iter().any(|cmd| cmd == command))
+    }
+
+    pub fn add_to_blacklist(&mut self, command: String) {
+        let mut list = self.blacklist.take().unwrap_or_default();
+        if !list.contains(&command) {
+            list.push(command);
+        }
+        self.blacklist = Some(list);
+    }
 }
 
 #[derive(Clone, Debug, clap::ValueEnum)]
@@ -2510,6 +2657,22 @@ pub fn generate_completion_output(
             recurse_limit,
         )
     }
+}
+
+/// Generate completion output for a command using [`FlycompSettings`].
+pub fn generate_completion_output_with_settings(
+    command_path: &str,
+    output: OutputFormat,
+    settings: &FlycompSettings,
+) -> anyhow::Result<String> {
+    generate_completion_output(
+        command_path,
+        output,
+        settings.strategy(),
+        settings.sandbox(),
+        settings.timeout_ms(),
+        settings.recurse_limit(),
+    )
 }
 
 #[cfg(test)]
