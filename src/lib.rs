@@ -5,6 +5,7 @@
 //! and dispatches to the appropriate sub-parser.
 use anyhow::Context;
 use chrono::{SecondsFormat, Utc};
+use regex_lite as regex;
 use strum::IntoStaticStr;
 
 use std::cell::Cell;

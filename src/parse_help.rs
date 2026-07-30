@@ -1,4 +1,5 @@
 use crate::{Arg, Command};
+use regex_lite as regex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum HelpFormat {

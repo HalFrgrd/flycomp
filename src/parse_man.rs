@@ -1,5 +1,5 @@
 use crate::{Arg, Command};
-use regex::Regex;
+use regex_lite::Regex;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ParsedOption {
