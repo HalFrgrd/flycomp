@@ -8,32 +8,30 @@ use chrono::{SecondsFormat, Utc};
 use regex_lite as regex;
 use strum::IntoStaticStr;
 
-use std::cell::Cell;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-thread_local! {
-    static MAN_PAGES_READ: Cell<usize> = Cell::new(0);
-    static HELP_RUNS: Cell<usize> = Cell::new(0);
-}
+static MAN_PAGES_READ: AtomicUsize = AtomicUsize::new(0);
+static HELP_RUNS: AtomicUsize = AtomicUsize::new(0);
 
 pub fn increment_man_pages_read() {
-    MAN_PAGES_READ.with(|c| c.set(c.get() + 1));
+    MAN_PAGES_READ.fetch_add(1, Ordering::Relaxed);
 }
 
 pub fn increment_help_runs() {
-    HELP_RUNS.with(|c| c.set(c.get() + 1));
+    HELP_RUNS.fetch_add(1, Ordering::Relaxed);
 }
 
 pub fn get_man_pages_read() -> usize {
-    MAN_PAGES_READ.with(|c| c.get())
+    MAN_PAGES_READ.load(Ordering::Relaxed)
 }
 
 pub fn get_help_runs() -> usize {
-    HELP_RUNS.with(|c| c.get())
+    HELP_RUNS.load(Ordering::Relaxed)
 }
 
 pub fn reset_stats() {
-    MAN_PAGES_READ.with(|c| c.set(0));
-    HELP_RUNS.with(|c| c.set(0));
+    MAN_PAGES_READ.store(0, Ordering::Relaxed);
+    HELP_RUNS.store(0, Ordering::Relaxed);
 }
 
 pub fn is_sandboxing_available() -> Option<String> {
@@ -3370,6 +3368,7 @@ fi
 
     #[test]
     fn test_render_json_output_includes_metadata() {
+        reset_stats();
         let json = render_json_output(
             "cargo",
             SynthesisStrategy::ManPageThenRunHelp,
