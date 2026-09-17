@@ -3407,6 +3407,7 @@ fi
 
     #[test]
     fn test_generate_completion_script_includes_metadata() {
+        let _guard = CWD_MUTEX.lock().unwrap();
         let script_zsh = generate_completion_script(
             "cargo",
             clap_complete::Shell::Zsh,

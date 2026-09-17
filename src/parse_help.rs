@@ -191,7 +191,7 @@ fn split_top_level(s: &str, delimiter: char) -> Vec<String> {
 }
 
 fn is_like_value_name(t: &str) -> bool {
-    if t.starts_with('<') || t.starts_with('[') || t.starts_with('(') {
+    if t.starts_with('<') || t.starts_with('[') || t.starts_with('(') || t.starts_with('{') {
         return true;
     }
     let clean = t.trim_end_matches(',');
@@ -1227,15 +1227,29 @@ pub fn parse_help_argparse(help: &str) -> Command {
         let is_args_section = trimmed == "positional arguments:"
             || trimmed == "optional arguments:"
             || trimmed == "options:"
-            || trimmed.starts_with("named arguments:");
+            || trimmed.starts_with("named arguments:")
+            || (indent_of(lines[i]) == 0
+                && trimmed.ends_with(':')
+                && !trimmed.to_lowercase().starts_with("usage:")
+                && trimmed.len() > 1
+                && lines[i + 1..]
+                    .iter()
+                    .find(|l| !l.trim().is_empty())
+                    .map_or(false, |l| indent_of(l) > 0));
 
         if is_args_section {
             i += 1;
             while i < lines.len() {
                 let line = lines[i];
                 if line.trim().is_empty() {
-                    i += 1;
-                    break;
+                    let next_non_empty = lines[i + 1..].iter().find(|l| !l.trim().is_empty());
+                    if next_non_empty.map_or(true, |l| indent_of(l) == 0) {
+                        i += 1;
+                        break;
+                    } else {
+                        i += 1;
+                        continue;
+                    }
                 }
                 if indent_of(line) == 0 && line.trim().ends_with(':') {
                     break;
@@ -1247,6 +1261,10 @@ pub fn parse_help_argparse(help: &str) -> Command {
                 let (short, longs, value_name, num_args) = if flag_part.starts_with('-') {
                     parse_flag_tokens(token_part)
                 } else {
+                    if inline_desc.is_none() && token_part.contains(' ') {
+                        i += 1;
+                        continue;
+                    }
                     let name_token = token_part.split_whitespace().next().unwrap_or("");
                     (None, vec![name_token.to_string()], None, None)
                 };
@@ -1766,6 +1784,222 @@ mod tests {
                 },
             ],
         );
+    }
+
+    #[test]
+    fn test_snakemake_help() {
+        let cmd = parse_help(&read_fixture(&["snakemake"]));
+        assert_eq!(cmd.name.as_deref(), Some("snakemake"));
+        assert!(
+            cmd.description
+                .as_deref()
+                .unwrap_or("")
+                .contains("Snakemake")
+        );
+
+        assert_contains_expected_args(
+            &cmd,
+            &[
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-h".to_string()),
+                        long: Some("--help".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "show this help message",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("targets".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Targets to build",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-n".to_string()),
+                        long: Some("--dry-run".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Do not execute anything",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--dryrun".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Do not execute anything",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--profile".to_string()),
+                        value_name: Some("PROFILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Profile to use",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--workflow-profile".to_string()),
+                        value_name: Some("WORKFLOW_PROFILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "workflow",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--cache".to_string()),
+                        value_name: Some("RULE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Store output files",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-s".to_string()),
+                        long: Some("--snakefile".to_string()),
+                        value_name: Some("FILE".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "snakefile",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-c".to_string()),
+                        long: Some("--cores".to_string()),
+                        value_name: Some("N".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "CPU cores",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        short: Some("-j".to_string()),
+                        long: Some("--jobs".to_string()),
+                        value_name: Some("N".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "CPU cluster/cloud jobs",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--local-cores".to_string()),
+                        value_name: Some("N".to_string()),
+                        num_args: Some("1".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "local rules",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--resources".to_string()),
+                        value_name: Some("NAME=INT".to_string()),
+                        num_args: Some("2".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Define additional resources",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--res".to_string()),
+                        value_name: Some("NAME=INT".to_string()),
+                        num_args: Some("2".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Define additional resources",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--software-deployment-method".to_string()),
+                        value_name: Some("{apptainer,conda,env-modules}".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "apptainer".to_string(),
+                            "conda".to_string(),
+                            "env-modules".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "deployment method",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--deployment-method".to_string()),
+                        value_name: Some("{apptainer,conda,env-modules}".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "apptainer".to_string(),
+                            "conda".to_string(),
+                            "env-modules".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "deployment method",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--deployment".to_string()),
+                        value_name: Some("{apptainer,conda,env-modules}".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "apptainer".to_string(),
+                            "conda".to_string(),
+                            "env-modules".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "deployment method",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--sdm".to_string()),
+                        value_name: Some("{apptainer,conda,env-modules}".to_string()),
+                        num_args: Some("1".to_string()),
+                        value_enum: Some(vec![
+                            "apptainer".to_string(),
+                            "conda".to_string(),
+                            "env-modules".to_string(),
+                        ]),
+                        ..Default::default()
+                    },
+                    description_contains: "deployment method",
+                },
+                ExpectedArg {
+                    arg: Arg {
+                        long: Some("--container-cleanup-images".to_string()),
+                        ..Default::default()
+                    },
+                    description_contains: "Remove unused containers",
+                },
+            ],
+        );
+
+        let mut clap_cmd = crate::to_clap_command(&cmd);
+        assert_eq!(clap_cmd.get_name(), "snakemake");
+
+        let mut buf = Vec::new();
+        clap_complete::generate(
+            clap_complete::Shell::Bash,
+            &mut clap_cmd,
+            "snakemake",
+            &mut buf,
+        );
+        let bash_script = String::from_utf8(buf).expect("valid utf8");
+        assert!(bash_script.contains("--dry-run"));
+        assert!(bash_script.contains("--software-deployment-method"));
+        assert!(bash_script.contains("apptainer"));
+        assert!(bash_script.contains("conda"));
+        assert!(bash_script.contains("env-modules"));
+        assert!(bash_script.contains("--cores"));
+        assert!(bash_script.contains("--jobs"));
+        assert!(bash_script.contains("--resources"));
+        assert!(bash_script.contains("--profile"));
     }
 
     #[test]

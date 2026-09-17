@@ -1193,3 +1193,5 @@ Add test man pages / help texts then run:
 ```bash
 cargo test --release
 ```
+
+A lot of the core parsing logic is AI generated.
